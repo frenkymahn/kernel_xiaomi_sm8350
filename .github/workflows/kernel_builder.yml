@@ -1,4 +1,4 @@
-name: Xiaomi 11T Pro 
+name: Xiaomi 11T Pro KernelSU Next Builder
 
 on:
   push:
@@ -13,13 +13,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: false
-          fetch-depth: 1
 
-      - name: Fix Git Modules Issue
+      - name: Fix Git Modules and Source
         run: |
-          git config --global --unset-all submodule.KernelSU.url || true
-          rm -f .gitmodules
+          git rm -f .gitmodules || rm -f .gitmodules
           rm -rf KernelSU drivers/kernelsu || true
+          git add .
 
       - name: Setup KernelSU Next
         run: |
@@ -30,6 +29,10 @@ jobs:
           sudo apt-get update && sudo apt-get install -y \
             build-essential gcc-10 g++-10 gcc-10-aarch64-linux-gnu gcc-10-arm-linux-gnueabi \
             libncurses5-dev bison flex bc git libssl-dev wget zip cpio python3 python3-pip
+          
+          # Force create proper symlinks for aarch64 gcc-10 compiler
+          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc-10 /usr/bin/aarch64-linux-gnu-gcc
+          sudo ln -sf /usr/bin/aarch64-linux-gnu-ld /usr/bin/aarch64-linux-gnu-ld
 
       - name: Compile Kernel and Configure KernelSU & BPF
         run: |
