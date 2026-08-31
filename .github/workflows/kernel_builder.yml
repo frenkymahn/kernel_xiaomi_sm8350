@@ -9,16 +9,11 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout Kernel Source
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Force Remove Git Modules Before Anything Else
+      - name: Clone Kernel Source Manually
         run: |
-          rm -rf .gitmodules
-          rm -rf KernelSU drivers/kernelsu || true
+          git clone --depth=1 https://github.com/${{ github.repository }}.github . || \
+          git clone --depth=1 https://github.com/${{ github.actor }}/kernel_xiaomi_sm8350.git .
+          rm -rf .gitmodules || true
 
       - name: Install Toolchain & Linkers
         run: |
