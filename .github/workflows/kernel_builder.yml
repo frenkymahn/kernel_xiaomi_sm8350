@@ -15,16 +15,18 @@ jobs:
           git clone --depth=1 https://github.com/${{ github.actor }}/kernel_xiaomi_sm8350.git .
           rm -rf .gitmodules || true
 
-      - name: Install Toolchain & Linkers
+      - name: Install Modern Toolchain (AOSP Clang & GCC)
         run: |
           sudo apt-get update && sudo apt-get install -y \
-            build-essential gcc-10 g++-10 gcc-10-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-            libncurses5-dev bison flex bc git libssl-dev wget zip cpio python3 python3-pip
+            build-essential libncurses5-dev bison flex bc git libssl-dev wget zip cpio python3 python3-pip
           
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc-10 /usr/bin/aarch64-linux-gnu-gcc
-          sudo ln -sf /usr/bin/aarch64-linux-gnu-ld.bfd /usr/bin/aarch64-linux-gnu-ld
+          # Clone AOSP Clang for modern processor flag support (Fixes -mcpu error)
+          git clone --depth=1 https://github.com/UndeadSegment/aosp-clang.git clang
+          
+          # Also ensure aarch64 linux GNU binutils are available
+          sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
 
-      - name: Compile Kernel
+      - name: Compile Kernel with Clang
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
@@ -32,37 +34,44 @@ jobs:
           export KBUILD_BUILD_USER="frenkymahn"
           export KBUILD_BUILD_HOST="frenkymahn-PC"
           
-          export PATH=/usr/bin:$PATH
+          # Setup Clang and Toolchain paths
+          export PATH="${{ github.workspace }}/clang/bin:/usr/bin:$PATH"
+          export CC=clang
+          export LD=ld.lld
+          export CLANG_TRIPLE=aarch64-linux-gnu-
           export CROSS_COMPILE=aarch64-linux-gnu-
-          export CC=aarch64-linux-gnu-gcc
-          export LD=aarch64-linux-gnu-ld
+          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
           
           mkdir -p out
           make O=out kangaroox-vili_defconfig
           
-          make O=out olddefconfig
-
           make -j$(nproc) O=out \
-            HOSTCC=gcc-10 \
-            HOSTCXX=g++-10 \
-            CC=aarch64-linux-gnu-gcc \
-            LD=aarch64-linux-gnu-ld \
+            CC=clang \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip \
             CROSS_COMPILE=aarch64-linux-gnu- \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
             LOCALVERSION="-Dark_kernel" \
-            Image.gz-dtb dtbo.img
+            Image.gz dtbo.img
 
       - name: Package Images
         run: |
           mkdir -p final_images
-          cp out/arch/arm64/boot/Image.gz-dtb final_images/
+          if [ -f out/arch/arm64/boot/Image.gz ]; then
+            cp out/arch/arm64/boot/Image.gz final_images/
+          elif [ -f out/arch/arm64/boot/Image.gz-dtb ]; then
+            cp out/arch/arm64/boot/Image.gz-dtb final_images/
+          fi
           
           if [ -f out/arch/arm64/boot/dtbo.img ]; then
             cp out/arch/arm64/boot/dtbo.img final_images/
           fi
 
           git clone https://github.com/osm0sis/AnyKernel3.git ak3
-          cp final_images/Image.gz-dtb ak3/
-          [ -f final_images/dtbo.img ] && cp final_images/dtbo.img ak3/dtbo.img
+          cp final_images/* ak3/ || true
           cd ak3 && zip -r ../Xiaomi-11T-Pro-DarkKernel.zip * && cd ..
 
       - name: Upload All Artifacts
