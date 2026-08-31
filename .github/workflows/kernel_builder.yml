@@ -12,11 +12,15 @@ jobs:
       - name: Checkout Kernel Source
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Remove Problematic Submodule Config
+        run: |
+          rm -f .gitmodules
+          rm -rf KernelSU || true
 
       - name: Setup KernelSU Next
         run: |
-          rm -rf KernelSU || true
           curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
 
       - name: Install Dependencies & Tools
