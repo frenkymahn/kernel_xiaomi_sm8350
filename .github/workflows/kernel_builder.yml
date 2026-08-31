@@ -11,8 +11,7 @@ jobs:
     steps:
       - name: Clone Kernel Source Manually
         run: |
-          git clone --depth=1 https://github.com/${{ github.repository }}.github . || \
-          git clone --depth=1 https://github.com/${{ github.actor }}/kernel_xiaomi_sm8350.git .
+          git clone --depth=1 https://github.com/frenkymahn/kernel_xiaomi_sm8350.git .
           rm -rf .gitmodules || true
 
       - name: Install Toolchain & Download Clang
@@ -22,7 +21,6 @@ jobs:
           
           sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
           
-          # Download valid prebuilt Clang safely using wget instead of git clone
           mkdir -p clang
           wget -qO- https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r450784d.tar.gz | tar -xz -C clang || \
           git clone --depth=1 https://gitlab.com/ThankYouMario/android_prebuilts_clang_host_linux-x86_clang-r416183b.git clang
