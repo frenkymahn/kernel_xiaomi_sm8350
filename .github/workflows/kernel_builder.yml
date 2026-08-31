@@ -11,19 +11,29 @@ jobs:
     steps:
       - name: Clone Kernel Source Manually
         run: |
-          git clone --depth=1 https://github.com/frenkymahn/kernel_xiaomi_sm8350.git .
-          rm -rf .gitmodules || true
+          rm -rf .git* || true
+          git clone --depth=1 https://github.com/frenkymahn/kernel_xiaomi_sm8350.git source_tmp
+          shopt -s dotglob
+          mv source_tmp/* .
+          rm -rf source_tmp .gitmodules || true
 
-      - name: Install Toolchain & Download Clang
+      - name: Install Toolchain & Stable Clang
         run: |
           sudo apt-get update && sudo apt-get install -y \
             build-essential libncurses5-dev bison flex bc git libssl-dev wget zip cpio python3 python3-pip
           
           sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
           
-          mkdir -p clang
-          wget -qO- https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r450784d.tar.gz | tar -xz -C clang || \
-          git clone --depth=1 https://gitlab.com/ThankYouMario/android_prebuilts_clang_host_linux-x86_clang-r416183b.git clang
+          # Use a stable and fast prebuilt Clang repository to avoid tar/auth errors
+          git clone --depth=1 https://github.com/kdrag0n/aarch64-elf-gcc.git gcc64 || true
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/clang-r416183b clang || \
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r383902 bsd_clang || true
+
+          if [ -d "clang/bin" ]; then
+            echo "Clang ready"
+          elif [ -d "bsd_clang/bin" ]; then
+            mv bsd_clang clang
+          fi
 
       - name: Compile Kernel with Clang
         run: |
