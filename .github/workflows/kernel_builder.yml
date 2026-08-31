@@ -1,4 +1,4 @@
-name: Xiaomi 11T Pro KernelSU Next Builder
+name: Xiaomi 11T Pro 
 
 on:
   push:
