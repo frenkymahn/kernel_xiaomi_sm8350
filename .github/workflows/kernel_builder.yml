@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Clone Kernel Source Manually
+      - name: Clone Kernel Source Cleanly
         run: |
           rm -rf .git* || true
           git clone --depth=1 https://github.com/frenkymahn/kernel_xiaomi_sm8350.git source_tmp
@@ -17,25 +17,22 @@ jobs:
           mv source_tmp/* .
           rm -rf source_tmp .gitmodules || true
 
-      - name: Install Toolchain, Python2 Symlink & Clang
+      - name: Setup Environment, Python & Proper Clang Toolchain
         run: |
           sudo apt-get update && sudo apt-get install -y \
             build-essential libncurses5-dev bison flex bc git libssl-dev wget zip cpio python3 python3-pip
           
-          # Fix python2 not found error by symlinking python3 to python/python2
           sudo ln -sf /usr/bin/python3 /usr/bin/python
           sudo ln -sf /usr/bin/python3 /usr/bin/python2
           
           sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
           
-          # Setup prebuilt Clang safely
-          git clone --depth=1 https://github.com/kdrag0n/aarch64-elf-gcc.git gcc64 || true
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/clang-r416183b clang || \
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r383902 bsd_clang || true
-
-          if [ ! -d "clang/bin" ] && [ -d "bsd_clang/bin" ]; then
-            mv bsd_clang clang
-          fi
+          # Download a clean, fully functional standalone Clang toolchain
+          mkdir -p clang
+          wget -qO clang.tar.gz https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r450784d.tar.gz || \
+          wget -qO clang.tar.gz https://github.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r383902/archive/refs/heads/main.zip
+          
+          tar -xzf clang.tar.gz -C clang  unzip -q clang.tar.gz -d clang  true
 
       - name: Compile Kernel with Clang
         run: |
@@ -45,7 +42,9 @@ jobs:
           export KBUILD_BUILD_USER="frenkymahn"
           export KBUILD_BUILD_HOST="frenkymahn-PC"
           
-          export PATH="${{ github.workspace }}/clang/bin:/usr/bin:$PATH"
+          # Correctly resolve LLVM paths inside the workspace
+          export PATH="${{ github.workspace }}/clang/bin:${{ github.workspace }}/clang/host/linux-x86/clang-r450784d/bin:/usr/bin:$PATH"
+          
           export CC=clang
           export LD=ld.lld
           export CLANG_TRIPLE=aarch64-linux-gnu-
@@ -67,7 +66,7 @@ jobs:
             LOCALVERSION="-Dark_kernel" \
             Image.gz
 
-      - name: Package Images
+      - name: Package Images & AnyKernel3
         run: |
           mkdir -p final_images
           if [ -f out/arch/arm64/boot/Image.gz ]; then
