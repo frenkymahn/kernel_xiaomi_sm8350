@@ -30,7 +30,11 @@ jobs:
           export KBUILD_BUILD_USER="frenkymahn"
           export KBUILD_BUILD_HOST="frenkymahn-PC"
           
-          # Use the exact defconfig found in the new repo
+          # Explicitly export cross compile paths for gcc-10
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          export CC=aarch64-linux-gnu-gcc-10
+          
           make O=out kangaroox-vili_defconfig
           
           # KernelSU Next & BPF configurations
