@@ -9,17 +9,16 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout Kernel Source
+      - name: Checkout Kernel Source and Clean Modules
         uses: actions/checkout@v4
         with:
           submodules: false
           persist-credentials: false
 
-      - name: Clean Git Modules Completely
+      - name: Force Remove Git Modules Before Anything Else
         run: |
           rm -rf .gitmodules
-          git config --global --remove-section submodule.KernelSU || true
-          git rm --cached .gitmodules || true
+          rm -rf KernelSU drivers/kernelsu || true
 
       - name: Install Toolchain & Linkers
         run: |
@@ -27,7 +26,6 @@ jobs:
             build-essential gcc-10 g++-10 gcc-10-aarch64-linux-gnu binutils-aarch64-linux-gnu \
             libncurses5-dev bison flex bc git libssl-dev wget zip cpio python3 python3-pip
           
-          # Explicitly map compiler and bfd linker binaries to standard paths
           sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc-10 /usr/bin/aarch64-linux-gnu-gcc
           sudo ln -sf /usr/bin/aarch64-linux-gnu-ld.bfd /usr/bin/aarch64-linux-gnu-ld
 
