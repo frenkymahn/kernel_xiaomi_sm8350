@@ -17,24 +17,19 @@ jobs:
           mv source_tmp/* .
           rm -rf source_tmp .gitmodules || true
 
-      - name: Setup Environment, Python & Proper Clang Toolchain
+      - name: Install Stable GCC-11 Toolchain & Dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y \
-            build-essential libncurses5-dev bison flex bc git libssl-dev wget zip cpio python3 python3-pip
+            build-essential libncurses5-dev bison flex bc git libssl-dev wget zip cpio python3 python3-pip \
+            gcc-11 g++-11 gcc-11-aarch64-linux-gnu binutils-aarch64-linux-gnu
           
           sudo ln -sf /usr/bin/python3 /usr/bin/python
           sudo ln -sf /usr/bin/python3 /usr/bin/python2
           
-          sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
-          
-          # Download a clean, fully functional standalone Clang toolchain
-          mkdir -p clang
-          wget -qO clang.tar.gz https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r450784d.tar.gz || \
-          wget -qO clang.tar.gz https://github.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r383902/archive/refs/heads/main.zip
-          
-          tar -xzf clang.tar.gz -C clang  unzip -q clang.tar.gz -d clang  true
+          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc-11 /usr/bin/aarch64-linux-gnu-gcc
+          sudo ln -sf /usr/bin/aarch64-linux-gnu-ld.bfd /usr/bin/aarch64-linux-gnu-ld
 
-      - name: Compile Kernel with Clang
+      - name: Compile Kernel with GCC-11
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
@@ -42,27 +37,20 @@ jobs:
           export KBUILD_BUILD_USER="frenkymahn"
           export KBUILD_BUILD_HOST="frenkymahn-PC"
           
-          # Correctly resolve LLVM paths inside the workspace
-          export PATH="${{ github.workspace }}/clang/bin:${{ github.workspace }}/clang/host/linux-x86/clang-r450784d/bin:/usr/bin:$PATH"
-          
-          export CC=clang
-          export LD=ld.lld
-          export CLANG_TRIPLE=aarch64-linux-gnu-
+          export PATH=/usr/bin:$PATH
           export CROSS_COMPILE=aarch64-linux-gnu-
-          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          export CC=aarch64-linux-gnu-gcc
+          export LD=aarch64-linux-gnu-ld
           
           mkdir -p out
           make O=out kangaroox-vili_defconfig
           
           make -j$(nproc) O=out \
-            CC=clang \
-            AR=llvm-ar \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump \
-            STRIP=llvm-strip \
+            HOSTCC=gcc-11 \
+            HOSTCXX=g++-11 \
+            CC=aarch64-linux-gnu-gcc \
+            LD=aarch64-linux-gnu-ld \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
             LOCALVERSION="-Dark_kernel" \
             Image.gz
 
@@ -73,10 +61,6 @@ jobs:
             cp out/arch/arm64/boot/Image.gz final_images/
           elif [ -f out/arch/arm64/boot/Image.gz-dtb ]; then
             cp out/arch/arm64/boot/Image.gz-dtb final_images/
-          fi
-          
-          if [ -f out/arch/arm64/boot/dtbo.img ]; then
-            cp out/arch/arm64/boot/dtbo.img final_images/
           fi
 
           git clone https://github.com/osm0sis/AnyKernel3.git ak3
