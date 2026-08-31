@@ -17,21 +17,23 @@ jobs:
           mv source_tmp/* .
           rm -rf source_tmp .gitmodules || true
 
-      - name: Install Toolchain & Stable Clang
+      - name: Install Toolchain, Python2 Symlink & Clang
         run: |
           sudo apt-get update && sudo apt-get install -y \
             build-essential libncurses5-dev bison flex bc git libssl-dev wget zip cpio python3 python3-pip
           
+          # Fix python2 not found error by symlinking python3 to python/python2
+          sudo ln -sf /usr/bin/python3 /usr/bin/python
+          sudo ln -sf /usr/bin/python3 /usr/bin/python2
+          
           sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
           
-          # Use a stable and fast prebuilt Clang repository to avoid tar/auth errors
+          # Setup prebuilt Clang safely
           git clone --depth=1 https://github.com/kdrag0n/aarch64-elf-gcc.git gcc64 || true
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/clang-r416183b clang || \
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_host_linux-x86_clang-r383902 bsd_clang || true
 
-          if [ -d "clang/bin" ]; then
-            echo "Clang ready"
-          elif [ -d "bsd_clang/bin" ]; then
+          if [ ! -d "clang/bin" ] && [ -d "bsd_clang/bin" ]; then
             mv bsd_clang clang
           fi
 
@@ -63,7 +65,7 @@ jobs:
             CROSS_COMPILE=aarch64-linux-gnu- \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             LOCALVERSION="-Dark_kernel" \
-            Image.gz dtbo.img
+            Image.gz
 
       - name: Package Images
         run: |
