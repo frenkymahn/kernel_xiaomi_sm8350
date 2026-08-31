@@ -15,16 +15,17 @@ jobs:
           git clone --depth=1 https://github.com/${{ github.actor }}/kernel_xiaomi_sm8350.git .
           rm -rf .gitmodules || true
 
-      - name: Install Modern Toolchain (AOSP Clang & GCC)
+      - name: Install Toolchain & Download Clang
         run: |
           sudo apt-get update && sudo apt-get install -y \
             build-essential libncurses5-dev bison flex bc git libssl-dev wget zip cpio python3 python3-pip
           
-          # Clone AOSP Clang for modern processor flag support (Fixes -mcpu error)
-          git clone --depth=1 https://github.com/UndeadSegment/aosp-clang.git clang
-          
-          # Also ensure aarch64 linux GNU binutils are available
           sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          
+          # Download valid prebuilt Clang safely using wget instead of git clone
+          mkdir -p clang
+          wget -qO- https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r450784d.tar.gz | tar -xz -C clang || \
+          git clone --depth=1 https://gitlab.com/ThankYouMario/android_prebuilts_clang_host_linux-x86_clang-r416183b.git clang
 
       - name: Compile Kernel with Clang
         run: |
@@ -34,7 +35,6 @@ jobs:
           export KBUILD_BUILD_USER="frenkymahn"
           export KBUILD_BUILD_HOST="frenkymahn-PC"
           
-          # Setup Clang and Toolchain paths
           export PATH="${{ github.workspace }}/clang/bin:/usr/bin:$PATH"
           export CC=clang
           export LD=ld.lld
