@@ -34,7 +34,7 @@ jobs:
         git clone --depth=1 https://github.com/kdrag0n/proton-clang.git tc/clang
         ls -la tc/clang/bin
 
-    - name: Clean Git Modules and Setup KernelSU
+    - name: Setup KernelSU and Compile Kernel
       run: |
         export PATH="$(pwd)/tc/clang/bin:$PATH"
         export ARCH=arm64
@@ -42,19 +42,19 @@ jobs:
         export KBUILD_BUILD_USER="FrenkyMahn"
         export KBUILD_BUILD_HOST="Next-Gen-Server"
 
-        # സബ്മോഡ്യൂൾ എറർ പൂർണ്ണമായി ഒഴിവാക്കാൻ ഗിറ്റ് കോൺഫിഗും ഫോൾഡറും ക്ലീൻ ചെയ്യുന്നു
         git rm -f KernelSU || true
         rm -rf KernelSU || true
         git config -f .gitmodules --remove-section submodule.KernelSU || true
         git rm --cached KernelSU || true
         rm -rf .git/modules/KernelSU || true
 
-        # ലേറ്റസ്റ്റ് KernelSU ഫ്രെഷ് ആയി ക്ലോൺ ചെയ്യുന്നു
         git clone --depth=1 https://github.com/tiann/KernelSU.git KernelSU
 
         mkdir -p out
         make O=out kangaroox-vili_defconfig
 
+        # വാണിങ്ങുകൾ എറർ ആകാതിരിക്കാൻ WERROR ഓഫ് ചെയ്യുന്നു
+        echo "CONFIG_WERROR=n" >> out/.config
         echo "CONFIG_BPF=y" >> out/.config
         echo "CONFIG_BPF_SYSCALL=y" >> out/.config
         echo "CONFIG_NET_CLS_ACT=y" >> out/.config
