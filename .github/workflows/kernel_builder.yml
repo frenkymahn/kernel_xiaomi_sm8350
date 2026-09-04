@@ -27,11 +27,11 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils || true
 
-    - name: Setup Clang Toolchain Fresh
+    - name: Setup Proton Clang Toolchain
       run: |
         rm -rf tc
         mkdir -p tc
-        git clone --depth=1 https://github.com/ZyCromerZ/Clang.git tc/clang
+        git clone --depth=1 https://github.com/kdrag0n/proton-clang.git tc/clang
         ls -la tc/clang/bin
 
     - name: Inject Configurations and Compile Kernel (Linux 5.10)
