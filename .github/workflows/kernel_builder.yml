@@ -25,7 +25,7 @@ jobs:
           libelf-dev liblz4-tool libncurses5-dev libsdl1.2-dev \
           libssl-dev libxml2 libxml2-utils lzop pngcrush rsync \
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
-          android-sdk-libsparse-utils || true
+          android-sdk-libsparse-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi || true
 
     - name: Setup Proton Clang Toolchain
       run: |
@@ -34,7 +34,7 @@ jobs:
         git clone --depth=1 https://github.com/kdrag0n/proton-clang.git tc/clang
         ls -la tc/clang/bin
 
-    - name: Inject Configurations and Compile Kernel (Linux 5.10)
+    - name: Compile Kernel with Correct Path and Flags
       run: |
         export PATH="$(pwd)/tc/clang/bin:$PATH"
         export ARCH=arm64
@@ -59,16 +59,21 @@ jobs:
 
         make -j$(nproc --all) O=out \
             LOCALVERSION="-Next-Gen-by-FrenkyMahn" \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            ARCH=arm64 \
+            SUBARCH=arm64 \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             AR=llvm-ar \
             NM=llvm-nm \
             OBJCOPY=llvm-objcopy \
             OBJDUMP=llvm-objdump \
             STRIP=llvm-strip
 
-    - name: Prepare Images and Package Flashable Zip (HyperOS/MIUI Ready)
+    - name: Package Flashable Zip for HyperOS/MIUI
       run: |
         mkdir -p kernel_package
         cp out/arch/arm64/boot/Image.gz kernel_package/
@@ -97,7 +102,7 @@ jobs:
         cp kernel_package/vendor_boot.img anykernel/ || true
 
         cd anykernel
-        zip -r9 ../Next-Gen-Kernel-vili-HyperOS-Complete.zip *
+        zip -r9 ../Next-Gen-Kernel-vili-FrenkyMahn.zip *
         cd ..
 
         cp kernel_package/* out/
@@ -105,11 +110,12 @@ jobs:
     - name: Upload Final Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: Next-Gen-Kernel-HyperOS-Package-vili
+        name: Next-Gen-Kernel-FrenkyMahn-Package
         path: |
-          Next-Gen-Kernel-vili-HyperOS-Complete.zip
+          Next-Gen-Kernel-vili-FrenkyMahn.zip
           out/Image.gz
           out/boot.img
           out/vendor_boot.img
           out/dtb
           out/dtbo.img
+          
