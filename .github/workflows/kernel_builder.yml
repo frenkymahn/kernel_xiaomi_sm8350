@@ -17,51 +17,47 @@ jobs:
           sudo ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfo.so.5
           sudo ln -sf /lib/x86_64-linux-gnu/libncurses.so.6 /lib/x86_64-linux-gnu/libncurses.so.5
 
-      - name: Pull Your Forked Kernel Source and 5.10 Clang Target Toolchain
+      - name: Pull Kernel Source and 5.10 Clang Target Toolchain
         run: |
-          # നിങ്ങളുടെ പുതിയ ഫോർക്ക് ചെയ്ത സോഴ്സ് കോഡ് ക്ലോൺ ചെയ്യുന്നു
           git clone --depth=1 https://github.com/frenkymahn/kernel_xiaomi_sm8350.git kernel-source
           
-          # മോഡേൺ Clang 5.10 ടൂൾചെയിൻ ഡൗൺലോഡ് ചെയ്യുന്നു
           mkdir -p clang
           cd clang
           curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r416183b.tar.gz || curl -LO https://gitlab.com/ThankYouMario/android_prebuilts_clang_host_linux-x86_clang-r416183b/-/raw/main/clang-r416183b.tar.gz
           cd ..
           
-          # AnyKernel3 ഫ്രെയിംവർക്ക്
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3
 
       - name: Inject Xiaomi HyperOS and Android 14-17 Defconfig Tunings
         run: |
           cd kernel-source/arch/arm64/configs/
           
-          # vili അല്ലെങ്കിൽ അനുയോജ്യമായ defconfig കണ്ടെത്തുന്നു
-          DEFCONFIG_FILE=$(ls vili_defconfig vendor/vili_defconfig 2>/dev/null | head -n 1)
-          if [ -z "$DEFCONFIG_FILE" ]; then
-            DEFCONFIG_FILE=$(ls *_defconfig 2>/dev/null | head -n 1)
+          if [ -f gki_defconfig ]; then
+            DEFCONFIG_NAME="gki_defconfig"
+          else
+            DEFCONFIG_NAME=$(ls *_defconfig | head -n 1)
           fi
           
-          echo "Using defconfig: $DEFCONFIG_FILE"
+          echo "Using defconfig: $DEFCONFIG_NAME"
           
-          echo "" >> "$DEFCONFIG_FILE"
-          echo "# ========================================================" >> "$DEFCONFIG_FILE"
-          echo "# SM8350 HYPEROS 5.10 KERNEL PRODUCTION CONFIG" >> "$DEFCONFIG_FILE"
-          echo "# ========================================================" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_BOARD_USES_VENDOR_BOOT=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE=n" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_BPF=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_BPF_SYSCALL=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_BPF_JIT=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_CGROUP_BPF=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_NET_CLS_ACT=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_NET_ACT_BPF=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_ALWAYS_PERMISSIVE=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_DM_VERITY=n" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_FORCE_DM_VERITY_FORCE_BURST=n" >> "$DEFCONFIG_FILE"
-          echo "CONFIG_VDSO=n" >> "$DEFCONFIG_FILE"
-          
-          echo "CONFIG_LOCALVERSION=\"-Next-Gen-Vili\"" >> "$DEFCONFIG_FILE"
+          echo "" >> "$DEFCONFIG_NAME"
+          echo "# ========================================================" >> "$DEFCONFIG_NAME"
+          echo "# SM8350 HYPEROS 5.10 KERNEL PRODUCTION CONFIG" >> "$DEFCONFIG_NAME"
+          echo "# ========================================================" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_BOARD_USES_VENDOR_BOOT=y" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE=n" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_BPF=y" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_BPF_SYSCALL=y" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_BPF_JIT=y" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_CGROUP_BPF=y" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_NET_CLS_ACT=y" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_NET_ACT_BPF=y" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_ALWAYS_PERMISSIVE=y" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_SECURITY_SELINUX_DEVELOP=y" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_DM_VERITY=n" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_FORCE_DM_VERITY_FORCE_BURST=n" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_VDSO=n" >> "$DEFCONFIG_NAME"
+          echo "CONFIG_LOCALVERSION=\"-Next-Gen-Vili\"" >> "$DEFCONFIG_NAME"
 
       - name: Clean Source-Level Patches for 5.10 Clang Compatibility
         run: |
@@ -152,13 +148,13 @@ jobs:
           
           rm -rf out
           
-          # കറക്റ്റ് ആയ defconfig ഉപയോഗിച്ച് മേക്കിംഗ് ആരംഭിക്കുന്നു
-          DEFCONFIG_NAME=$(ls arch/arm64/configs/vili_defconfig arch/arm64/configs/vendor/vili_defconfig 2>/dev/null | head -n 1 | xargs basename)
-          if [ -z "$DEFCONFIG_NAME" ]; then
-            DEFCONFIG_NAME=$(ls arch/arm64/configs/*_defconfig | head -n 1 | xargs basename)
+          if [ -f arch/arm64/configs/gki_defconfig ]; then
+            TARGET_DEF="gki_defconfig"
+          else
+            TARGET_DEF=$(ls arch/arm64/configs/*_defconfig | head -n 1 | xargs basename)
           fi
           
-          make -j$(nproc --all) O=out "$DEFCONFIG_NAME"
+          make -j$(nproc --all) O=out "$TARGET_DEF"
           
           make -j$(nproc --all) O=out \
             CC=clang \
