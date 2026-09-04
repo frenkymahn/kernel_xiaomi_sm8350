@@ -34,13 +34,17 @@ jobs:
         git clone --depth=1 https://github.com/kdrag0n/proton-clang.git tc/clang
         ls -la tc/clang/bin
 
-    - name: Compile Kernel with Correct Path and Flags
+    - name: Setup KernelSU and Compile Kernel
       run: |
         export PATH="$(pwd)/tc/clang/bin:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
         export KBUILD_BUILD_USER="FrenkyMahn"
         export KBUILD_BUILD_HOST="Next-Gen-Server"
+
+        # ലേറ്റസ്റ്റ് KernelSU ഓട്ടോമാറ്റിക്കായി ആഡ് ചെയ്യുന്നു
+        rm -rf KernelSU || true
+        git clone https://github.com/tiann/KernelSU.git KernelSU || true
 
         mkdir -p out
         make O=out kangaroox-vili_defconfig
