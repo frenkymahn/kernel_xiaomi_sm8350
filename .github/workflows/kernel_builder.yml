@@ -59,6 +59,8 @@ jobs:
 
         make -j$(nproc --all) O=out \
             LOCALVERSION="-Next-Gen" \
+            HOSTCC=gcc \
+            HOSTCXX=g++ \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
