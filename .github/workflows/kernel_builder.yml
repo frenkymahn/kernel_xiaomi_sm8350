@@ -27,16 +27,18 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils || true
 
-    - name: Setup Clang Toolchain Globally
+    - name: Setup Clang Toolchain Locally
       run: |
-        echo "Starting Clang Toolchain Download..."
-        git clone --depth=1 https://github.com/ZyCromerZ/Clang.git /opt/clang
-        echo "Clang Toolchain Download Completed Successfully!"
-        ls -la /opt/clang/bin
+        mkdir -p tc/clang
+        cd tc/clang
+        git clone --depth=1 https://github.com/ZyCromerZ/Clang.git .
+        cd ../..
+        echo "Clang Toolchain Setup Complete!"
+        ls -la tc/clang/bin
 
     - name: Inject Configurations and Compile Kernel (Linux 5.10)
       run: |
-        export PATH="/opt/clang/bin:$PATH"
+        export PATH="$(pwd)/tc/clang/bin:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
         export KBUILD_BUILD_USER="FrenkyMahn"
