@@ -27,12 +27,11 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils || true
 
-    - name: Download Clang Toolchain Direct
+    - name: Clone Clang Toolchain Safely
       run: |
         mkdir -p tc/clang
         cd tc/clang
-        curl -LO "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r416183b.tar.gz"
-        tar -xzf clang-r416183b.tar.gz || tar --warning=no-timestamp -xf clang-r416183b.tar.gz || true
+        git clone --depth=1 https://github.com/ZyCromerZ/Clang.git -b 17.0.6 .
         cd ../..
 
     - name: Inject Configurations and Compile Kernel (Linux 5.10)
@@ -44,7 +43,7 @@ jobs:
         export KBUILD_BUILD_HOST="Next-Gen-Server"
 
         mkdir -p out
-        make O=out vendor/vili_defconfig
+        make O=out vili_defconfig
 
         echo "CONFIG_BPF=y" >> out/.config
         echo "CONFIG_BPF_SYSCALL=y" >> out/.config
