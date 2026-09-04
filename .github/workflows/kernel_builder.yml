@@ -27,10 +27,11 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils || true
 
-    - name: Setup Clang Toolchain Correctly
+    - name: Setup Clang Toolchain Fresh
       run: |
-        rm -rf tc/clang
-        mkdir -p tc/clang
+        # നിലവിലുള്ള tc ഫോൾഡർ പൂർണ്ണമായി ഒഴിവാക്കി പുതിയതായി ക്ലോൺ ചെയ്യുന്നു
+        rm -rf tc
+        mkdir -p tc
         git clone --depth=1 https://github.com/ZyCromerZ/Clang.git tc/clang
         echo "Verifying Clang Binaries:"
         ls -la tc/clang/bin
@@ -108,7 +109,7 @@ jobs:
       with:
         name: Next-Gen-Kernel-Full-Package-vili
         path: |
-          Next-Gen-Kernel-vili-Complete.zip
+          Next-Gen-Kernel-Full-Package-vili/Next-Gen-Kernel-vili-Complete.zip
           out/Image.gz
           out/boot.img
           out/vendor_boot.img
