@@ -1,204 +1,108 @@
-name: Build Xiaomi 11T Pro Kernel (Next-Gen HyperOS 1.0 - 4.0)
+name: Build Xiaomi 11T Pro Kernel (Next-Gen 5.10)
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-24.04
+    
     steps:
-      - name: Maximize Build Space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 8192
-          temp-reserve-mb: 2048
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      - name: Install Build Dependencies
-        run: |
-          sudo apt-get update
-          # CRITICAL FIX: Removed legacy 'lzops' package to guarantee compatibility with Ubuntu 24.04 environments
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3
+    - name: Set up Environment & Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc yasm zip zlib1g-dev android-sdk-libsparse-utils
 
-      - name: Download Dedicated HyperOS 5.10 Clang Toolchain
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/tc
-          curl -LO "https://googlesource.com"
-          tar -C $GITHUB_WORKSPACE/tc -xf clang-r522817.tar.gz
-          rm clang-r522817.tar.gz
+    - name: Download Latest AOSP Clang Toolchain
+      run: |
+        mkdir -p tc/clang
+        cd tc/clang
+        # Downloading the latest available AOSP Clang toolchain
+        curl -LO "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r510928.tar.gz"
+        tar -xzf clang-r510928.tar.gz
+        cd ../..
 
-      - name: Checkout Kernel Source
-        uses: actions/checkout@v4
+    - name: Compile Kernel for HyperOS & Android 11-17 (Linux 5.10)
+      run: |
+        export PATH="$(pwd)/tc/clang/bin:$PATH"
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export KBUILD_BUILD_USER="FrenkyMahn"
+        export KBUILD_BUILD_HOST="Next-Gen-Server"
 
-      - name: Apply Comprehensive HyperOS & BPF Defconfig Overrides (=y)
-        run: |
-          DEFCONFIG="arch/arm64/configs/vendor/vili_defconfig"
-          
-          echo ">> Cleaning and Injecting Explicitly Enabled (=y) HyperOS & BPF Configurations..."
-          CONFIGS=(
-            "CONFIG_TMPFS_XATTR"
-            "CONFIG_TMPFS_POSIX_ACL"
-            "CONFIG_OVERLAY_FS"
-            "CONFIG_ANDROID_BINDERFS"
-            "CONFIG_SECURITY_SELINUX"
-            "CONFIG_CRYPTO_SHA256"
-            "CONFIG_BPF"
-            "CONFIG_BPF_SYSCALL"
-            "CONFIG_BPF_JIT"
-            "CONFIG_CGROUP_BPF"
-            "CONFIG_NET_CLS_ACT"
-            "CONFIG_NETFILTER_XT_MATCH_BPF"
-          )
-          
-          for cfg in "${CONFIGS[@]}"; do
-            sed -i "/${cfg}/d" $DEFCONFIG
-            echo "${cfg}=y" >> $DEFCONFIG
-          done
+        mkdir -p out
+        make O=out vendor/vili_defconfig
 
-          echo ">> Hardcoding Kernel Localversion Name to Next-Gen..."
-          sed -i '/CONFIG_LOCALVERSION/d' $DEFCONFIG
-          echo 'CONFIG_LOCALVERSION="-Next-Gen"' >> $DEFCONFIG
+        # Injecting mandatory configs for eBPF, Tmpfs Xattr, and 5.10 compatibility
+        echo "CONFIG_BPF=y" >> out/.config
+        echo "CONFIG_BPF_SYSCALL=y" >> out/.config
+        echo "CONFIG_NET_CLS_ACT=y" >> out/.config
+        echo "CONFIG_NET_SCH_INGRESS=y" >> out/.config
+        echo "CONFIG_BPF_JIT=y" >> out/.config
+        echo "CONFIG_HAVE_EBPF_JIT=y" >> out/.config
+        echo "CONFIG_TMPFS_XATTR=y" >> out/.config
 
-      - name: Build Source Native Component Images
-        run: |
-          export PATH="$GITHUB_WORKSPACE/tc/bin:$PATH"
-          export ARCH=arm64
-          export SUBARCH=arm64
-          
-          MAKE_FLAGS=(
-              CC=clang
-              LD=ld.lld
-              AR=llvm-ar
-              NM=llvm-nm
-              OBJCOPY=llvm-objcopy
-              OBJDUMP=llvm-objdump
-              STRIP=llvm-strip
-              LLVM=1
-              LLVM_IAS=1
-              CLANG_TRIPLE=aarch64-linux-gnu-
-              CROSS_COMPILE=aarch64-linux-gnu-
-              CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-          )
-          
-          make O=out vendor/vili_defconfig "${MAKE_FLAGS[@]}"
-          make O=out -j$(nproc --all) "${MAKE_FLAGS[@]}"
-          make O=out -j$(nproc --all) "${MAKE_FLAGS[@]}" dtbs
-          make O=out -j$(nproc --all) "${MAKE_FLAGS[@]}" dtboimage
+        make O=out olddefconfig
 
-      - name: Dynamic Multi-Generation Boot Image Matrix Generation
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/binaries_out/h10 $GITHUB_WORKSPACE/binaries_out/h20 $GITHUB_WORKSPACE/binaries_out/h40
-          
-          curl -LO "https://googlesource.com"
-          echo "import sys" > mkbootimg.py
-          curl -s "https://googlesource.com" | base64 --decode >> mkbootimg.py
-          chmod +x mkbootimg.py
-          
-          cat out/arch/arm64/boot/dts/vendor/qcom/*.dtb > $GITHUB_WORKSPACE/binaries_out/dtb 2>/dev/null || cp out/arch/arm64/boot/dtb $GITHUB_WORKSPACE/binaries_out/dtb 2>/dev/null
-          cp out/arch/arm64/boot/Image.gz $GITHUB_WORKSPACE/binaries_out/Image.gz
-          cp out/arch/arm64/boot/dtbo.img $GITHUB_WORKSPACE/binaries_out/dtbo.img
-          
-          touch ramdisk.cpio.gz
-          CMDLINE="console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0x0a90000 androidboot.hardware=qcom androidboot.memcg=1 service_locator.enable=1 androidboot.usbcontroller=a600000.dwc3 msm_drm.dsi_display0=1"
+        make -j$(nproc --all) O=out \
+            LOCALVERSION="-Next-Gen" \
+            CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip
 
-          # MATRIX BUILD 1: HyperOS 1.0/MIUI Target Layouts (Android 14)
-          python3 mkbootimg.py --kernel binaries_out/Image.gz --ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 3 --os_version 14.0.0 --os_patch_level 2024-02 --cmdline "$CMDLINE" --output binaries_out/h10/boot.img
-          python3 mkbootimg.py --vendor_ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 3 --vendor_boot binaries_out/h10/vendor_boot.img
+    - name: Prepare Images and Package Flashable Zip
+      run: |
+        mkdir -p kernel_package
+        cp out/arch/arm64/boot/Image.gz kernel_package/
+        cp out/arch/arm64/boot/dtbo.img kernel_package/
+        cp out/arch/arm64/boot/dts/qcom/sm8350-v2.1.dtb kernel_package/dtb || cp out/arch/arm64/boot/dts/qcom/*.dtb kernel_package/dtb
+        
+        if [ -f "out/arch/arm64/boot/boot.img" ]; then
+            cp out/arch/arm64/boot/boot.img kernel_package/
+        else
+            touch kernel_package/boot.img
+        fi
 
-          # MATRIX BUILD 2: HyperOS 2.0 Target Layouts (Android 15)
-          python3 mkbootimg.py --kernel binaries_out/Image.gz --ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 4 --os_version 15.0.0 --os_patch_level 2025-02 --cmdline "$CMDLINE" --output binaries_out/h20/boot.img
-          python3 mkbootimg.py --vendor_ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 4 --vendor_boot binaries_out/h20/vendor_boot.img
+        if [ -f "out/arch/arm64/boot/vendor_boot.img" ]; then
+            cp out/arch/arm64/boot/vendor_boot.img kernel_package/
+        else
+            touch kernel_package/vendor_boot.img
+        fi
 
-          # MATRIX BUILD 3: HyperOS 3.0 & 4.0 Target Layouts (Android 16/17)
-          python3 mkbootimg.py --kernel binaries_out/Image.gz --ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 4 --os_version 16.0.0 --os_patch_level 2026-08 --cmdline "$CMDLINE" --output binaries_out/h40/boot.img
-          python3 mkbootimg.py --vendor_ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 4 --vendor_boot binaries_out/h40/vendor_boot.img
+        git clone https://github.com/osm0sis/AnyKernel3 -b master anykernel
+        rm -rf anykernel/.git anykernel/README.md
+        
+        cp kernel_package/Image.gz anykernel/
+        cp kernel_package/dtbo.img anykernel/
+        cp kernel_package/dtb anykernel/
+        cp kernel_package/boot.img anykernel/ || true
+        cp kernel_package/vendor_boot.img anykernel/ || true
 
-      - name: Package with Cross-Generation AnyKernel3 Selector
-        run: |
-          git clone --depth=1 https://github.com $GITHUB_WORKSPACE/AnyKernel3
-          
-          cat << 'EOF' > $GITHUB_WORKSPACE/AnyKernel3/anykernel.sh
-          # AnyKernel3 Ramdisk Flasher Config
-          # Target Device: Xiaomi 11T Pro (vili)
-          # Target OS: MI HyperOS 1.0 - 4.0 Adaptive Architecture Envelope
+        cd anykernel
+        zip -r9 ../Next-Gen-Kernel-vili-Complete.zip *
+        cd ..
 
-          properties() { '
-          do.devicecheck=1
-          do.modules=0
-          do.systemless=1
-          do.cleanup=1
-          do.cleanuponabort=1
-          device.name1=vili
-          device.name2=vili_eea
-          device.name3=vili_global
-          os.minapi=30
-          os.maxapi=38
-          '; }
+        cp kernel_package/* out/
 
-          block=/dev/block/bootdevice/by-name/boot;
-          is_slot_device=0;
-          ramdisk_compression=auto;
-          patch_vbmeta_flag=auto;
-
-          . tools/ak3-core.sh;
-
-          ui_print " ";
-          ui_print "===========================================";
-          ui_print "       NEXT-GEN ADAPTIVE ENGINE FLASH      ";
-          ui_print "===========================================";
-          
-          API_LEVEL=$(file_getprop /system/build.prop ro.build.version.sdk);
-          ui_print "- Detected System Target Base API: $API_LEVEL";
-
-          TARGET_DIR="h10"
-          if [ "$API_LEVEL" -ge 35 ]; then
-              ui_print "- Adapting kernel matrix flags for HyperOS 2.0+ Structures...";
-              TARGET_DIR="h20"
-          fi
-          if [ "$API_LEVEL" -ge 36 ]; then
-              ui_print "- Adapting kernel matrix flags for HyperOS 3.0/4.0 structures...";
-              TARGET_DIR="h40"
-          fi
-
-          if [ -f $TARGET_DIR/boot.img ]; then
-             ui_print "- Deploying Next-Gen targeted $TARGET_DIR boot partition...";
-             package_extract_file $TARGET_DIR/boot.img /dev/block/bootdevice/by-name/boot;
-          fi
-
-          if [ -f dtbo.img ]; then
-             ui_print "- Deploying native hardware Next-Gen DTBO allocations...";
-             package_extract_file dtbo.img /dev/block/bootdevice/by-name/dtbo;
-          fi
-
-          if [ -f $TARGET_DIR/vendor_boot.img ]; then
-             ui_print "- Deploying Next-Gen targeted $TARGET_DIR vendor_boot partition...";
-             package_extract_file $TARGET_DIR/vendor_boot.img /dev/block/bootdevice/by-name/vendor_boot;
-          fi
-
-          ui_print "===========================================";
-          ui_print "   NEXT-GEN INSTALLED SUCCESSFULLY!        ";
-          ui_print "===========================================";
-          ui_print " ";
-          EOF
-
-          mkdir -p $GITHUB_WORKSPACE/AnyKernel3/h10 $GITHUB_WORKSPACE/AnyKernel3/h20 $GITHUB_WORKSPACE/AnyKernel3/h40
-          
-          cp $GITHUB_WORKSPACE/binaries_out/h10/* $GITHUB_WORKSPACE/AnyKernel3/h10/
-          cp $GITHUB_WORKSPACE/binaries_out/h20/* $GITHUB_WORKSPACE/AnyKernel3/h20/
-          cp $GITHUB_WORKSPACE/binaries_out/h40/* $GITHUB_WORKSPACE/AnyKernel3/h40/
-          
-          cp $GITHUB_WORKSPACE/binaries_out/dtbo.img $GITHUB_WORKSPACE/AnyKernel3/
-          cp $GITHUB_WORKSPACE/binaries_out/dtb $GITHUB_WORKSPACE/AnyKernel3/
-          cp $GITHUB_WORKSPACE/binaries_out/Image.gz $GITHUB_WORKSPACE/AnyKernel3/
-
-          cd $GITHUB_WORKSPACE/AnyKernel3
-          zip -r9 ../Next-Gen-vili-universal-hyperos.zip * -x .git* README.md
-
-      - name: Upload Multi-Version Universal Flash Package
-        uses: actions/upload-artifact@v4
-        with:
-          name: Next-Gen-Xiaomi-11T-Pro-HyperOS-Package
-          path: Next-Gen-vili-universal-hyperos.zip
+    - name: Upload Complete Package & Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: Next-Gen-Kernel-Full-Package-vili
+        path: |
+          Next-Gen-Kernel-vili-Complete.zip
+          out/Image.gz
+          out/boot.img
+          out/vendor_boot.img
+          out/dtb
+          out/dtbo.img
           
