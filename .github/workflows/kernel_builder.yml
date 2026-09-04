@@ -27,11 +27,12 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils || true
 
-    - name: Clone Clang Toolchain Safely
+    - name: Download Clang Toolchain Direct
       run: |
         mkdir -p tc/clang
         cd tc/clang
-        git clone --depth=1 https://github.com/kdrag0n/aosp-clang.git .
+        curl -LO "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r416183b.tar.gz"
+        tar -xzf clang-r416183b.tar.gz || tar --warning=no-timestamp -xf clang-r416183b.tar.gz || true
         cd ../..
 
     - name: Inject Configurations and Compile Kernel (Linux 5.10)
