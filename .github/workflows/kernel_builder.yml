@@ -1,4 +1,4 @@
-name: Build Xiaomi 11T Pro Kernel (Next-Gen 5.10 Custom)
+name: Build Xiaomi 11T Pro Kernel (Next-Gen 5.10 Final)
 
 on:
   workflow_dispatch:
@@ -10,12 +10,13 @@ jobs:
     runs-on: ubuntu-24.04
     
     steps:
-    - name: Checkout Repository
+    - name: Checkout Repository Cleanly
       uses: actions/checkout@v4
       with:
-        submodules: 'recursive'
+        submodules: false
+        fetch-depth: 1
 
-    - name: Set up Environment & Bypass Missing Packages
+    - name: Setup Build Environment and Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends \
@@ -26,16 +27,15 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils || true
 
-    - name: Download and Verify Clang Toolchain
+    - name: Download AOSP Clang Toolchain Securely
       run: |
         mkdir -p tc/clang
         cd tc/clang
-        # ഏറ്റവും സ്റ്റേബിൾ ആയ Clang ടൂൾചെയിൻ ലിങ്ക് ഉപയോഗിച്ച് എറർ വരാത്ത രീതിയിൽ ഡൗൺലോഡ് ചെയ്യുന്നു
         curl -L -o clang.tar.gz "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r487747c.tar.gz"
         tar -xzf clang.tar.gz || tar --warning=no-timestamp -xf clang.tar.gz
         cd ../..
 
-    - name: Inject Custom Features & Compile Kernel (Linux 5.10)
+    - name: Inject Configurations and Compile Kernel (Linux 5.10)
       run: |
         export PATH="$(pwd)/tc/clang/bin:$PATH"
         export ARCH=arm64
@@ -46,7 +46,6 @@ jobs:
         mkdir -p out
         make O=out vendor/vili_defconfig
 
-        # eBPF, TMPFS_XATTR മറ്റ് ആവശ്യമായ കോൺഫിഗറേഷനുകൾ ഇവിടെ ഇൻജക്ട് ചെയ്യുന്നു
         echo "CONFIG_BPF=y" >> out/.config
         echo "CONFIG_BPF_SYSCALL=y" >> out/.config
         echo "CONFIG_NET_CLS_ACT=y" >> out/.config
@@ -104,7 +103,7 @@ jobs:
 
         cp kernel_package/* out/
 
-    - name: Upload Complete Package & Artifacts
+    - name: Upload Final Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: Next-Gen-Kernel-Full-Package-vili
