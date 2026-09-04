@@ -29,7 +29,10 @@ jobs:
 
     - name: Setup Clang Toolchain Globally
       run: |
+        echo "Starting Clang Toolchain Download..."
         git clone --depth=1 https://github.com/ZyCromerZ/Clang.git /opt/clang
+        echo "Clang Toolchain Download Completed Successfully!"
+        ls -la /opt/clang/bin
 
     - name: Inject Configurations and Compile Kernel (Linux 5.10)
       run: |
@@ -40,7 +43,7 @@ jobs:
         export KBUILD_BUILD_HOST="Next-Gen-Server"
 
         mkdir -p out
-        make O=out vendor/vili_defconfig
+        make O=out vili_defconfig
 
         echo "CONFIG_BPF=y" >> out/.config
         echo "CONFIG_BPF_SYSCALL=y" >> out/.config
