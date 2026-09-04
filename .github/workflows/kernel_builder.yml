@@ -44,17 +44,18 @@ jobs:
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+        export CC=clang
+        export AR=llvm-ar
+        export NM=llvm-nm
+        export OBJCOPY=llvm-objcopy
+        export OBJDUMP=llvm-objdump
+        export STRIP=llvm-strip
 
         rm -rf KernelSU || true
-        git rm -f KernelSU || true
-        git config -f .gitmodules --remove-section submodule.KernelSU || true
-        git rm --cached KernelSU || true
-        rm -rf .git/modules/KernelSU || true
-
         git clone --depth=1 https://github.com/tiann/KernelSU.git KernelSU
 
         mkdir -p out
-        make O=out kangaroox-vili_defconfig
+        make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- kangaroox-vili_defconfig
 
         echo "CONFIG_WERROR=n" >> out/.config
         echo "CONFIG_BPF=y" >> out/.config
@@ -67,12 +68,16 @@ jobs:
         echo "CONFIG_EXFAT_FS=y" >> out/.config
         echo "CONFIG_F2FS_FS=y" >> out/.config
 
-        make O=out olddefconfig
+        make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
         make -j$(nproc --all) O=out \
             LOCALVERSION="-Next-Gen-by-FrenkyMahn" \
             LLVM=1 \
             LLVM_IAS=1 \
+            ARCH=arm64 \
+            SUBARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             CC=clang \
             AR=llvm-ar \
             NM=llvm-nm \
