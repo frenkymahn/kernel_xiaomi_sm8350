@@ -30,7 +30,6 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-aarch64-linux-gnu \
           python3
-        sudo ln -sf /usr/bin/python3 /usr/bin/python2
 
     - name: Setup Proton Clang Toolchain
       run: |
@@ -53,6 +52,11 @@ jobs:
         rm -rf KernelSU drivers/kernelsu || true
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
+        # Fix Python 3 bytes/str concatenation issue in mkdtboimg.py dynamically
+        if [ -f "scripts/mkdtboimg.py" ]; then
+          sed -i 's/dt_entry_buf += compressed_entry/dt_entry_buf += compressed_entry.encode() if isinstance(compressed_entry, str) else compressed_entry/g' scripts/mkdtboimg.py || true
+        fi
+
         mkdir -p out
         make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- kangaroox-vili_defconfig
 
@@ -70,10 +74,11 @@ jobs:
 
         make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
-        make -j$(nproc --all) O=out V=1 \
+        make -j$(nproc --all) O=out \
             KCFLAGS="-w" \
             LOCALVERSION="-Next-Gen-by-FrenkyMahn" \
             LLVM=1 \
+            LLVM_IAS=1 \
             ARCH=arm64 \
             SUBARCH=arm64 \
             CROSS_COMPILE=aarch64-linux-gnu- \
