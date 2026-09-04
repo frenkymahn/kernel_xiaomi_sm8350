@@ -19,7 +19,8 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzops pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3
+          # CRITICAL FIX: Removed legacy 'lzops' package to guarantee compatibility with Ubuntu 24.04 environments
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3
 
       - name: Download Dedicated HyperOS 5.10 Clang Toolchain
         run: |
@@ -90,13 +91,11 @@ jobs:
         run: |
           mkdir -p $GITHUB_WORKSPACE/binaries_out/h10 $GITHUB_WORKSPACE/binaries_out/h20 $GITHUB_WORKSPACE/binaries_out/h40
           
-          # Download official AOSP image packaging framework logic
           curl -LO "https://googlesource.com"
           echo "import sys" > mkbootimg.py
           curl -s "https://googlesource.com" | base64 --decode >> mkbootimg.py
           chmod +x mkbootimg.py
           
-          # Consolidate raw structural compiled components
           cat out/arch/arm64/boot/dts/vendor/qcom/*.dtb > $GITHUB_WORKSPACE/binaries_out/dtb 2>/dev/null || cp out/arch/arm64/boot/dtb $GITHUB_WORKSPACE/binaries_out/dtb 2>/dev/null
           cp out/arch/arm64/boot/Image.gz $GITHUB_WORKSPACE/binaries_out/Image.gz
           cp out/arch/arm64/boot/dtbo.img $GITHUB_WORKSPACE/binaries_out/dtbo.img
@@ -104,21 +103,15 @@ jobs:
           touch ramdisk.cpio.gz
           CMDLINE="console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0x0a90000 androidboot.hardware=qcom androidboot.memcg=1 service_locator.enable=1 androidboot.usbcontroller=a600000.dwc3 msm_drm.dsi_display0=1"
 
-          # ----------------------------------------------------
-          # MATRIX BUILD 1: HyperOS 1.0 Targeting Configuration (Android 14)
-          # ----------------------------------------------------
+          # MATRIX BUILD 1: HyperOS 1.0/MIUI Target Layouts (Android 14)
           python3 mkbootimg.py --kernel binaries_out/Image.gz --ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 3 --os_version 14.0.0 --os_patch_level 2024-02 --cmdline "$CMDLINE" --output binaries_out/h10/boot.img
           python3 mkbootimg.py --vendor_ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 3 --vendor_boot binaries_out/h10/vendor_boot.img
 
-          # ----------------------------------------------------
-          # MATRIX BUILD 2: HyperOS 2.0 Targeting Configuration (Android 15)
-          # ----------------------------------------------------
+          # MATRIX BUILD 2: HyperOS 2.0 Target Layouts (Android 15)
           python3 mkbootimg.py --kernel binaries_out/Image.gz --ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 4 --os_version 15.0.0 --os_patch_level 2025-02 --cmdline "$CMDLINE" --output binaries_out/h20/boot.img
           python3 mkbootimg.py --vendor_ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 4 --vendor_boot binaries_out/h20/vendor_boot.img
 
-          # ----------------------------------------------------
-          # MATRIX BUILD 3: HyperOS 3.0 / 4.0 Targeting Configuration (Android 16/17)
-          # ----------------------------------------------------
+          # MATRIX BUILD 3: HyperOS 3.0 & 4.0 Target Layouts (Android 16/17)
           python3 mkbootimg.py --kernel binaries_out/Image.gz --ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 4 --os_version 16.0.0 --os_patch_level 2026-08 --cmdline "$CMDLINE" --output binaries_out/h40/boot.img
           python3 mkbootimg.py --vendor_ramdisk ramdisk.cpio.gz --dtb binaries_out/dtb --pagesize 4096 --header_version 4 --vendor_boot binaries_out/h40/vendor_boot.img
 
@@ -156,11 +149,9 @@ jobs:
           ui_print "       NEXT-GEN ADAPTIVE ENGINE FLASH      ";
           ui_print "===========================================";
           
-          # Detect active OS version via fallback build profile properties
           API_LEVEL=$(file_getprop /system/build.prop ro.build.version.sdk);
           ui_print "- Detected System Target Base API: $API_LEVEL";
 
-          # Adaptive matrix director loop matching structural profiles
           TARGET_DIR="h10"
           if [ "$API_LEVEL" -ge 35 ]; then
               ui_print "- Adapting kernel matrix flags for HyperOS 2.0+ Structures...";
@@ -171,7 +162,6 @@ jobs:
               TARGET_DIR="h40"
           fi
 
-          # Direct hardware override payload injections
           if [ -f $TARGET_DIR/boot.img ]; then
              ui_print "- Deploying Next-Gen targeted $TARGET_DIR boot partition...";
              package_extract_file $TARGET_DIR/boot.img /dev/block/bootdevice/by-name/boot;
@@ -193,7 +183,6 @@ jobs:
           ui_print " ";
           EOF
 
-          # Build internal archive directory structure matching script parameters
           mkdir -p $GITHUB_WORKSPACE/AnyKernel3/h10 $GITHUB_WORKSPACE/AnyKernel3/h20 $GITHUB_WORKSPACE/AnyKernel3/h40
           
           cp $GITHUB_WORKSPACE/binaries_out/h10/* $GITHUB_WORKSPACE/AnyKernel3/h10/
@@ -204,4 +193,12 @@ jobs:
           cp $GITHUB_WORKSPACE/binaries_out/dtb $GITHUB_WORKSPACE/AnyKernel3/
           cp $GITHUB_WORKSPACE/binaries_out/Image.gz $GITHUB_WORKSPACE/AnyKernel3/
 
+          cd $GITHUB_WORKSPACE/AnyKernel3
+          zip -r9 ../Next-Gen-vili-universal-hyperos.zip * -x .git* README.md
 
+      - name: Upload Multi-Version Universal Flash Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Next-Gen-Xiaomi-11T-Pro-HyperOS-Package
+          path: Next-Gen-vili-universal-hyperos.zip
+          
