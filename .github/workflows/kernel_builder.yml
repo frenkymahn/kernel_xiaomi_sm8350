@@ -13,7 +13,7 @@ jobs:
     - name: Checkout Repository Cleanly
       uses: actions/checkout@v4
       with:
-        submodules: recursive
+        submodules: false
         fetch-depth: 1
 
     - name: Setup Build Environment and Dependencies
@@ -45,10 +45,8 @@ jobs:
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
-        # KernelSU സുരക്ഷിതമായി ഇന്റഗ്രേറ്റ് ചെയ്യുന്നു
-        if [ ! -d "KernelSU" ]; then
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
-        fi
+        rm -rf KernelSU drivers/kernelsu || true
+        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
         mkdir -p out
         make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- kangaroox-vili_defconfig
