@@ -58,7 +58,7 @@ jobs:
         make O=out olddefconfig
 
         make -j$(nproc --all) O=out \
-            LOCALVERSION="-Next-Gen" \
+            LOCALVERSION="-Next-Gen-by-FrenkyMahn" \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE=aarch64-linux-gnu- \
@@ -68,7 +68,7 @@ jobs:
             OBJDUMP=llvm-objdump \
             STRIP=llvm-strip
 
-    - name: Prepare Images and Package Flashable Zip
+    - name: Prepare Images and Package Flashable Zip (HyperOS/MIUI Ready)
       run: |
         mkdir -p kernel_package
         cp out/arch/arm64/boot/Image.gz kernel_package/
@@ -97,7 +97,7 @@ jobs:
         cp kernel_package/vendor_boot.img anykernel/ || true
 
         cd anykernel
-        zip -r9 ../Next-Gen-Kernel-vili-Complete.zip *
+        zip -r9 ../Next-Gen-Kernel-vili-HyperOS-Complete.zip *
         cd ..
 
         cp kernel_package/* out/
@@ -105,12 +105,11 @@ jobs:
     - name: Upload Final Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: Next-Gen-Kernel-Full-Package-vili
+        name: Next-Gen-Kernel-HyperOS-Package-vili
         path: |
-          Next-Gen-Kernel-vili-Complete.zip
+          Next-Gen-Kernel-vili-HyperOS-Complete.zip
           out/Image.gz
           out/boot.img
           out/vendor_boot.img
           out/dtb
           out/dtbo.img
-          
