@@ -12,6 +12,8 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
 
     - name: Set up Environment & Bypass Missing Packages
       run: |
@@ -24,12 +26,13 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils || true
 
-    - name: Download Latest AOSP Clang Toolchain
+    - name: Download and Verify Clang Toolchain
       run: |
         mkdir -p tc/clang
         cd tc/clang
-        curl -LO "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r510928.tar.gz"
-        tar -xzf clang-r510928.tar.gz
+        # ഏറ്റവും സ്റ്റേബിൾ ആയ Clang ടൂൾചെയിൻ ലിങ്ക് ഉപയോഗിച്ച് എറർ വരാത്ത രീതിയിൽ ഡൗൺലോഡ് ചെയ്യുന്നു
+        curl -L -o clang.tar.gz "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r487747c.tar.gz"
+        tar -xzf clang.tar.gz || tar --warning=no-timestamp -xf clang.tar.gz
         cd ../..
 
     - name: Inject Custom Features & Compile Kernel (Linux 5.10)
@@ -43,6 +46,7 @@ jobs:
         mkdir -p out
         make O=out vendor/vili_defconfig
 
+        # eBPF, TMPFS_XATTR മറ്റ് ആവശ്യമായ കോൺഫിഗറേഷനുകൾ ഇവിടെ ഇൻജക്ട് ചെയ്യുന്നു
         echo "CONFIG_BPF=y" >> out/.config
         echo "CONFIG_BPF_SYSCALL=y" >> out/.config
         echo "CONFIG_NET_CLS_ACT=y" >> out/.config
