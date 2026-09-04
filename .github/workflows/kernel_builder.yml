@@ -25,7 +25,9 @@ jobs:
           libelf-dev liblz4-tool libncurses5-dev libsdl1.2-dev \
           libssl-dev libxml2 libxml2-utils lzop pngcrush rsync \
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
-          android-sdk-libsparse-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi || true
+          android-sdk-libsparse-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+          python3 || true
+        sudo ln -sf /usr/bin/python3 /usr/bin/python2
 
     - name: Setup Proton Clang Toolchain
       run: |
@@ -66,7 +68,7 @@ jobs:
 
         make O=out olddefconfig
 
-        make -j$(nproc --all) O=out V=1 \
+        make -j$(nproc --all) O=out \
             LOCALVERSION="-Next-Gen-by-FrenkyMahn" \
             LLVM=1 \
             LLVM_IAS=1 \
