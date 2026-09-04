@@ -27,23 +27,20 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils || true
 
-    - name: Clone Clang Toolchain Safely
+    - name: Setup Clang Toolchain Globally
       run: |
-        mkdir -p tc/clang
-        cd tc/clang
-        git clone --depth=1 https://github.com/ZyCromerZ/Clang.git .
-        cd ../..
+        git clone --depth=1 https://github.com/ZyCromerZ/Clang.git /opt/clang
 
     - name: Inject Configurations and Compile Kernel (Linux 5.10)
       run: |
-        export PATH="$(pwd)/tc/clang/bin:$PATH"
+        export PATH="/opt/clang/bin:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
         export KBUILD_BUILD_USER="FrenkyMahn"
         export KBUILD_BUILD_HOST="Next-Gen-Server"
 
         mkdir -p out
-        make O=out vili_defconfig
+        make O=out vendor/vili_defconfig
 
         echo "CONFIG_BPF=y" >> out/.config
         echo "CONFIG_BPF_SYSCALL=y" >> out/.config
