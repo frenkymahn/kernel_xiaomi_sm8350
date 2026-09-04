@@ -42,8 +42,8 @@ jobs:
         export KBUILD_BUILD_USER="FrenkyMahn"
         export KBUILD_BUILD_HOST="Next-Gen-Server"
 
-        git rm -f KernelSU || true
         rm -rf KernelSU || true
+        git rm -f KernelSU || true
         git config -f .gitmodules --remove-section submodule.KernelSU || true
         git rm --cached KernelSU || true
         rm -rf .git/modules/KernelSU || true
@@ -53,7 +53,6 @@ jobs:
         mkdir -p out
         make O=out kangaroox-vili_defconfig
 
-        # വാണിങ്ങുകൾ എറർ ആകാതിരിക്കാൻ WERROR ഓഫ് ചെയ്യുന്നു
         echo "CONFIG_WERROR=n" >> out/.config
         echo "CONFIG_BPF=y" >> out/.config
         echo "CONFIG_BPF_SYSCALL=y" >> out/.config
