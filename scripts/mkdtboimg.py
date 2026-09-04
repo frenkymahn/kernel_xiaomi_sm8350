@@ -479,7 +479,7 @@ class Dtbo(object):
                 dt_entry.dt_offset = dt_offset
                 compressed_entry, dt_entry.size = self.compress_dt_entry(dt_entry_compression_info,
                                                                          dt_entry.dt_file)
-                dt_entry_buf += compressed_entry
+                dt_entry_buf += compressed_entry.encode() if isinstance(compressed_entry, str) else compressed_entry
                 dt_offset += dt_entry.size
                 self.total_size += dt_entry.size
             self.__dt_entries.append(dt_entry)
