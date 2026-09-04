@@ -31,9 +31,7 @@ jobs:
       run: |
         rm -rf tc/clang
         mkdir -p tc/clang
-        git clone --depth=1 https://github.com/ZyCromerZ/Clang.git tc-clang
-        cp -r tc-clang/* tc/clang/
-        rm -rf tc-clang
+        git clone --depth=1 https://github.com/ZyCromerZ/Clang.git tc/clang
         echo "Verifying Clang Binaries:"
         ls -la tc/clang/bin
 
@@ -46,7 +44,6 @@ jobs:
         export KBUILD_BUILD_HOST="Next-Gen-Server"
 
         mkdir -p out
-        # ശരിയായ kangaroox-vili_defconfig ഇവിടെ നൽകിയിരിക്കുന്നു
         make O=out kangaroox-vili_defconfig
 
         echo "CONFIG_BPF=y" >> out/.config
