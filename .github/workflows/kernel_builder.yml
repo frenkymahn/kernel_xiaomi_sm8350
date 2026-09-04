@@ -52,27 +52,8 @@ jobs:
         rm -rf KernelSU drivers/kernelsu || true
         curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
-        # Fix Python 3 bytes/str concatenation issue in mkdtboimg.py dynamically
-        if [ -f "scripts/mkdtboimg.py" ]; then
-          sed -i 's/dt_entry_buf += compressed_entry/dt_entry_buf += compressed_entry.encode() if isinstance(compressed_entry, str) else compressed_entry/g' scripts/mkdtboimg.py || true
-        fi
-
         mkdir -p out
         make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- kangaroox-vili_defconfig
-
-        echo "CONFIG_WERROR=n" >> out/.config
-        echo "CONFIG_KSU=y" >> out/.config
-        echo "CONFIG_BPF=y" >> out/.config
-        echo "CONFIG_BPF_SYSCALL=y" >> out/.config
-        echo "CONFIG_NET_CLS_ACT=y" >> out/.config
-        echo "CONFIG_NET_SCH_INGRESS=y" >> out/.config
-        echo "CONFIG_BPF_JIT=y" >> out/.config
-        echo "CONFIG_HAVE_EBPF_JIT=y" >> out/.config
-        echo "CONFIG_TMPFS_XATTR=y" >> out/.config
-        echo "CONFIG_EXFAT_FS=y" >> out/.config
-        echo "CONFIG_F2FS_FS=y" >> out/.config
-
-        make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
         make -j$(nproc --all) O=out \
             KCFLAGS="-w" \
