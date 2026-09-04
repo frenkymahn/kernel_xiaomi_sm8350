@@ -27,12 +27,11 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils || true
 
-    - name: Download Toolchain Without Authentication
+    - name: Clone Clang Toolchain Safely
       run: |
         mkdir -p tc/clang
         cd tc/clang
-        curl -L -o clang.tar.gz "https://github.com/ZyCromerZ/Clang/releases/download/17.0.6-20231206/Clang-17.0.6.tar.gz"
-        tar -xzf clang.tar.gz
+        git clone --depth=1 https://github.com/kdrag0n/aosp-clang.git .
         cd ../..
 
     - name: Inject Configurations and Compile Kernel (Linux 5.10)
