@@ -13,7 +13,7 @@ jobs:
     - name: Checkout Repository Cleanly
       uses: actions/checkout@v4
       with:
-        submodules: true
+        submodules: false
         fetch-depth: 1
 
     - name: Setup Build Environment and Dependencies
@@ -34,7 +34,7 @@ jobs:
         git clone --depth=1 https://github.com/kdrag0n/proton-clang.git tc/clang
         ls -la tc/clang/bin
 
-    - name: Setup KernelSU and Compile Kernel
+    - name: Clean Git Modules and Setup KernelSU
       run: |
         export PATH="$(pwd)/tc/clang/bin:$PATH"
         export ARCH=arm64
@@ -42,9 +42,15 @@ jobs:
         export KBUILD_BUILD_USER="FrenkyMahn"
         export KBUILD_BUILD_HOST="Next-Gen-Server"
 
-        if [ ! -d "KernelSU" ]; then
-            git clone https://github.com/tiann/KernelSU.git KernelSU
-        fi
+        # സബ്മോഡ്യൂൾ എറർ പൂർണ്ണമായി ഒഴിവാക്കാൻ ഗിറ്റ് കോൺഫിഗും ഫോൾഡറും ക്ലീൻ ചെയ്യുന്നു
+        git rm -f KernelSU || true
+        rm -rf KernelSU || true
+        git config -f .gitmodules --remove-section submodule.KernelSU || true
+        git rm --cached KernelSU || true
+        rm -rf .git/modules/KernelSU || true
+
+        # ലേറ്റസ്റ്റ് KernelSU ഫ്രെഷ് ആയി ക്ലോൺ ചെയ്യുന്നു
+        git clone --depth=1 https://github.com/tiann/KernelSU.git KernelSU
 
         mkdir -p out
         make O=out kangaroox-vili_defconfig
