@@ -13,7 +13,7 @@ jobs:
     - name: Checkout Repository Cleanly
       uses: actions/checkout@v4
       with:
-        submodules: false
+        submodules: true
         fetch-depth: 1
 
     - name: Setup Build Environment and Dependencies
@@ -42,9 +42,9 @@ jobs:
         export KBUILD_BUILD_USER="FrenkyMahn"
         export KBUILD_BUILD_HOST="Next-Gen-Server"
 
-        # ലേറ്റസ്റ്റ് KernelSU ഓട്ടോമാറ്റിക്കായി ആഡ് ചെയ്യുന്നു
-        rm -rf KernelSU || true
-        git clone https://github.com/tiann/KernelSU.git KernelSU || true
+        if [ ! -d "KernelSU" ]; then
+            git clone https://github.com/tiann/KernelSU.git KernelSU
+        fi
 
         mkdir -p out
         make O=out kangaroox-vili_defconfig
@@ -77,7 +77,7 @@ jobs:
             OBJDUMP=llvm-objdump \
             STRIP=llvm-strip
 
-    - name: Package Flashable Zip for HyperOS/MIUI
+    - name: Prepare Flashable Zip and Images
       run: |
         mkdir -p kernel_package
         cp out/arch/arm64/boot/Image.gz kernel_package/
