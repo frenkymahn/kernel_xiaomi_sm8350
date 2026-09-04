@@ -1,4 +1,4 @@
-name: Build Xiaomi 11T Pro Kernel (Next-Gen 5.10)
+name: Build Xiaomi 11T Pro Kernel (Next-Gen 5.10 Custom)
 
 on:
   workflow_dispatch:
@@ -13,21 +13,26 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Set up Environment & Dependencies
+    - name: Set up Environment & Bypass Missing Packages
       run: |
         sudo apt-get update
-        sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc yasm zip zlib1g-dev android-sdk-libsparse-utils
+        sudo apt-get install -y --no-install-recommends \
+          bc bison build-essential ccache curl flex \
+          g++-multilib gcc-multilib git gnupg gperf imagemagick \
+          libelf-dev liblz4-tool libncurses5-dev libsdl1.2-dev \
+          libssl-dev libxml2 libxml2-utils lzop pngcrush rsync \
+          schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
+          android-sdk-libsparse-utils || true
 
     - name: Download Latest AOSP Clang Toolchain
       run: |
         mkdir -p tc/clang
         cd tc/clang
-        # Downloading the latest available AOSP Clang toolchain
         curl -LO "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r510928.tar.gz"
         tar -xzf clang-r510928.tar.gz
         cd ../..
 
-    - name: Compile Kernel for HyperOS & Android 11-17 (Linux 5.10)
+    - name: Inject Custom Features & Compile Kernel (Linux 5.10)
       run: |
         export PATH="$(pwd)/tc/clang/bin:$PATH"
         export ARCH=arm64
@@ -38,7 +43,6 @@ jobs:
         mkdir -p out
         make O=out vendor/vili_defconfig
 
-        # Injecting mandatory configs for eBPF, Tmpfs Xattr, and 5.10 compatibility
         echo "CONFIG_BPF=y" >> out/.config
         echo "CONFIG_BPF_SYSCALL=y" >> out/.config
         echo "CONFIG_NET_CLS_ACT=y" >> out/.config
@@ -46,6 +50,8 @@ jobs:
         echo "CONFIG_BPF_JIT=y" >> out/.config
         echo "CONFIG_HAVE_EBPF_JIT=y" >> out/.config
         echo "CONFIG_TMPFS_XATTR=y" >> out/.config
+        echo "CONFIG_EXFAT_FS=y" >> out/.config
+        echo "CONFIG_F2FS_FS=y" >> out/.config
 
         make O=out olddefconfig
 
