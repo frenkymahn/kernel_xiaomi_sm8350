@@ -70,7 +70,7 @@ jobs:
         export ARCH=arm64
         export SUBARCH=arm64
         export KBUILD_BUILD_USER="FrenkyMahn"
-        export KBUILD_BUILD_HOST="Next-Gen-Server"
+        export KBUILD_BUILD_HOST="Next-Gen"
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
