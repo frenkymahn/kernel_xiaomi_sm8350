@@ -13,10 +13,11 @@ jobs:
     - name: Checkout Repository Cleanly
       run: |
         git init
-        git remote add origin https://github.com/${{ github.repository }}
+        git remote add origin https://github.com{{ github.repository }}
         git fetch --depth=1 origin main
         git checkout -f FETCH_HEAD
         
+        # Clean out broken configurations/directories safely
         rm -rf .gitmodules KernelSU drivers/kernelsu || true
         git rm -rf KernelSU drivers/kernelsu 2>/dev/null || true
         rm -rf .git/modules/KernelSU || true
@@ -40,7 +41,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y python2 || true
         
-        # If apt completely fails to find python2, download the official binary safely
+        # If apt completely fails to find python2, download a portable binary safely
         if ! command -v python2 &> /dev/null; then
           curl -fLo python2 https://github.com || \
           curl -fLo python2 https://githubusercontent.com || true
@@ -51,11 +52,16 @@ jobs:
         # Double check symlink mapping configuration 
         sudo ln -sf /usr/bin/python2 /usr/bin/python || true
 
+    - name: Integrate Official KernelSU Setup
+      run: |
+        mkdir -p drivers/kernelsu
+        curl -LSs "https://githubusercontent.com" | bash -s main
+
     - name: Setup Proton Clang Toolchain
       run: |
         rm -rf tc
         mkdir -p tc
-        git clone --depth=1 https://github.com/kdrag0n/proton-clang.git tc/clang
+        git clone --depth=1 https://github.com tc/clang
         ls -la tc/clang/bin
 
     - name: Compile Pure Kernel Without Errors
@@ -64,7 +70,7 @@ jobs:
         export ARCH=arm64
         export SUBARCH=arm64
         export KBUILD_BUILD_USER="FrenkyMahn"
-        export KBUILD_BUILD_HOST="Next-Gen-Server"
+        export KBUILD_BUILD_HOST="Next-Gen"
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
@@ -85,7 +91,7 @@ jobs:
             PYTHON=python3 \
             PYTHON2=python2 \
             KCFLAGS="-w" \
-            LOCALVERSION="-Next-Gen" \
+            LOCALVERSION="-Next-Gen-by-FrenkyMahn" \
             LLVM=1 \
             LLVM_IAS=1 \
             ARCH=arm64 \
@@ -119,7 +125,7 @@ jobs:
             touch kernel_package/vendor_boot.img
         fi
 
-        git clone https://github.com/osm0sis/AnyKernel3 -b master anykernel
+        git clone https://github.com -b master anykernel
         rm -rf anykernel/.git anykernel/README.md
         
         cp kernel_package/Image.gz anykernel/ || true
