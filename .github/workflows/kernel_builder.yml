@@ -11,13 +11,13 @@ jobs:
     
     steps:
     - name: Checkout Repository Cleanly
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Clean Broken Configurations and Modules
       run: |
-        git init
-        git remote add origin https://github.com{{ github.repository }}
-        git fetch --depth=1 origin main
-        git checkout -f FETCH_HEAD
-        
-        # Clean out broken configurations/directories safely
+        # Clean out any old submodules or broken directories safely
         rm -rf .gitmodules KernelSU drivers/kernelsu || true
         git rm -rf KernelSU drivers/kernelsu 2>/dev/null || true
         rm -rf .git/modules/KernelSU || true
@@ -70,7 +70,7 @@ jobs:
         export ARCH=arm64
         export SUBARCH=arm64
         export KBUILD_BUILD_USER="FrenkyMahn"
-        export KBUILD_BUILD_HOST="Next-Gen"
+        export KBUILD_BUILD_HOST="Next-Gen-Server"
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
