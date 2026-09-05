@@ -49,12 +49,20 @@ jobs:
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
-        rm -rf KernelSU drivers/kernelsu || true
-        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s v1e
+        # Setup KernelSU properly
+        rm -rf drivers/kernelsu KernelSU || true
+        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+        
+        # Verify drivers/kernelsu exists
+        if [ ! -d "drivers/kernelsu" ]; then
+            echo "KernelSU setup failed!"
+            exit 1
+        fi
 
         mkdir -p out
         make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- kangaroox-vili_defconfig
 
+        # Force enable KernelSU and required configs
         echo "CONFIG_WERROR=n" >> out/.config
         echo "CONFIG_KSU=y" >> out/.config
         echo "CONFIG_BPF=y" >> out/.config
@@ -62,8 +70,8 @@ jobs:
 
         make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
-        # Using -j1 to pinpoint the exact compilation error line
-        make -j1 O=out \
+        # Build with multi-core now that the error is identified and fixed
+        make -j$(nproc --all) O=out \
             KCFLAGS="-w" \
             LOCALVERSION="-Next-Gen-by-FrenkyMahn" \
             LLVM=1 \
@@ -118,7 +126,7 @@ jobs:
       with:
         name: Next-Gen-Kernel-FrenkyMahn-Package
         path: |
-          Next-Gen-Kernel-vili-FrenkyMahn.zip
+          Next-Gen-Kernel-FrenkyMahn.zip
           out/Image.gz
           out/boot.img
           out/vendor_boot.img
