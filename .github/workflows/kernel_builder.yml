@@ -55,8 +55,15 @@ jobs:
         mkdir -p out
         make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- kangaroox-vili_defconfig
 
-        # Using -j1 to force compilation to stop and print the exact error on screen
-        make -j1 O=out \
+        # Enable KernelSU and necessary configurations
+        echo "CONFIG_WERROR=n" >> out/.config
+        echo "CONFIG_KSU=y" >> out/.config
+        echo "CONFIG_BPF=y" >> out/.config
+        echo "CONFIG_BPF_SYSCALL=y" >> out/.config
+
+        make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+
+        make -j$(nproc --all) O=out \
             KCFLAGS="-w" \
             LOCALVERSION="-Next-Gen-by-FrenkyMahn" \
             LLVM=1 \
@@ -111,7 +118,7 @@ jobs:
       with:
         name: Next-Gen-Kernel-FrenkyMahn-Package
         path: |
-          Next-Gen-Kernel-FrenkyMahn.zip
+          Next-Gen-Kernel-vili-FrenkyMahn.zip
           out/Image.gz
           out/boot.img
           out/vendor_boot.img
