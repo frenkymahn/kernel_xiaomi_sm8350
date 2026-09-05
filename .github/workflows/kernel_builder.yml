@@ -29,7 +29,8 @@ jobs:
           libssl-dev libxml2 libxml2-utils lzop pngcrush rsync \
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-aarch64-linux-gnu \
-          python3
+          python3 python3-is-python3
+        sudo ln -sf /usr/bin/python3 /usr/bin/python2
 
     - name: Setup Proton Clang Toolchain
       run: |
@@ -62,7 +63,6 @@ jobs:
 
         make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
-        # Restored full multi-core compilation power (-j$(nproc --all)) for fast build
         make -j$(nproc --all) O=out \
             KCFLAGS="-w" \
             LOCALVERSION="-Next-Gen-by-FrenkyMahn" \
