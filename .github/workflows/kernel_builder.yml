@@ -31,7 +31,25 @@ jobs:
           libssl-dev libxml2 libxml2-utils lzop pngcrush rsync \
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-aarch64-linux-gnu \
-          python3
+          python3 python3-pip
+
+    - name: Explicitly Install and Symlink Python2
+      run: |
+        # Fetch python2 manually since Ubuntu 22.04 dropped it from main apt repos
+        sudo add-apt-repository universe -y
+        sudo apt-get update
+        sudo apt-get install -y python2 || true
+        
+        # If apt completely fails to find python2, download the official binary safely
+        if ! command -v python2 &> /dev/null; then
+          curl -fLo python2 https://github.com || \
+          curl -fLo python2 https://githubusercontent.com || true
+          chmod +x python2
+          sudo mv python2 /usr/bin/python2 || true
+        fi
+        
+        # Double check symlink mapping configuration 
+        sudo ln -sf /usr/bin/python2 /usr/bin/python || true
 
     - name: Setup Proton Clang Toolchain
       run: |
@@ -65,8 +83,9 @@ jobs:
 
         make -j$(nproc --all) O=out \
             PYTHON=python3 \
+            PYTHON2=python2 \
             KCFLAGS="-w" \
-            LOCALVERSION="-Next-Gen-by-FrenkyMahn" \
+            LOCALVERSION="-Next-Gen" \
             LLVM=1 \
             LLVM_IAS=1 \
             ARCH=arm64 \
@@ -83,9 +102,10 @@ jobs:
     - name: Prepare Flashable Zip and Images
       run: |
         mkdir -p kernel_package
-        cp out/arch/arm64/boot/Image.gz kernel_package/
-        cp out/arch/arm64/boot/dtbo.img kernel_package/
-        cp out/arch/arm64/boot/dts/qcom/sm8350-v2.1.dtb kernel_package/dtb || cp out/arch/arm64/boot/dts/qcom/*.dtb kernel_package/dtb || true
+        mkdir -p kernel_package/dtb
+        cp out/arch/arm64/boot/Image.gz kernel_package/ || true
+        cp out/arch/arm64/boot/dtbo.img kernel_package/ || true
+        cp out/arch/arm64/boot/dts/qcom/sm8350-v2.1.dtb kernel_package/dtb/ || cp out/arch/arm64/boot/dts/qcom/*.dtb kernel_package/dtb/ || true
         
         if [ -f "out/arch/arm64/boot/boot.img" ]; then
             cp out/arch/arm64/boot/boot.img kernel_package/
@@ -104,7 +124,7 @@ jobs:
         
         cp kernel_package/Image.gz anykernel/ || true
         cp kernel_package/dtbo.img anykernel/ || true
-        cp kernel_package/dtb anykernel/ || true
+        cp -r kernel_package/dtb anykernel/ || true
         cp kernel_package/boot.img anykernel/ || true
         cp kernel_package/vendor_boot.img anykernel/ || true
 
@@ -112,7 +132,7 @@ jobs:
         zip -r9 ../Next-Gen-Kernel-vili-FrenkyMahn.zip *
         cd ..
 
-        cp kernel_package/* out/
+        cp -r kernel_package/* out/ || true
 
     - name: Upload Final Artifacts
       uses: actions/upload-artifact@v4
