@@ -15,9 +15,13 @@ jobs:
       with:
         fetch-depth: 1
 
-    - name: Clean Broken Configurations and Modules
+    - name: Fix Broken Modules and Submodule Remnants
       run: |
-        # Clean out any old submodules or broken directories safely
+        # Strip out any corrupt submodule tracking entries causing checkout errors
+        git config --unset submodule.KernelSU.url || true
+        git config -f .git/config --remove-section submodule.KernelSU 2>/dev/null || true
+        
+        # Clean local file systems completely
         rm -rf .gitmodules KernelSU drivers/kernelsu || true
         git rm -rf KernelSU drivers/kernelsu 2>/dev/null || true
         rm -rf .git/modules/KernelSU || true
@@ -36,12 +40,10 @@ jobs:
 
     - name: Explicitly Install and Symlink Python2
       run: |
-        # Fetch python2 manually since Ubuntu 22.04 dropped it from main apt repos
         sudo add-apt-repository universe -y
         sudo apt-get update
         sudo apt-get install -y python2 || true
         
-        # If apt completely fails to find python2, download a portable binary safely
         if ! command -v python2 &> /dev/null; then
           curl -fLo python2 https://github.com || \
           curl -fLo python2 https://githubusercontent.com || true
@@ -49,20 +51,26 @@ jobs:
           sudo mv python2 /usr/bin/python2 || true
         fi
         
-        # Double check symlink mapping configuration 
         sudo ln -sf /usr/bin/python2 /usr/bin/python || true
 
-    - name: Integrate Official KernelSU Setup
+    - name: Integrate Official KernelSU Tree Directly
       run: |
-        mkdir -p drivers/kernelsu
-        curl -LSs "https://githubusercontent.com" | bash -s main
+        rm -rf drivers/kernelsu
+        # Fetch directly via clean tracking tree to avoid curl raw connection errors
+        git clone --depth=1 https://github.com drivers/kernelsu
+        
+        # Manually create the kernel hook linkages since we are bypassing the raw setup script
+        if [ -f "drivers/Makefile" ] && ! grep -q "kernelsu" drivers/Makefile; then
+          echo "obj-y += kernelsu/" >> drivers/Makefile
+        fi
 
-    - name: Setup Proton Clang Toolchain
+    - name: Setup Proton Clang Toolchain Fixed
       run: |
         rm -rf tc
         mkdir -p tc
-        git clone --depth=1 https://github.com tc/clang
-        ls -la tc/clang/bin
+        # Explicit target string to isolate git tracking failures
+        git clone --depth=1 https://github.com $(pwd)/tc/clang
+        ls -la $(pwd)/tc/clang/bin
 
     - name: Compile Pure Kernel Without Errors
       run: |
@@ -70,7 +78,7 @@ jobs:
         export ARCH=arm64
         export SUBARCH=arm64
         export KBUILD_BUILD_USER="FrenkyMahn"
-        export KBUILD_BUILD_HOST="Next-Gen"
+        export KBUILD_BUILD_HOST="Next-Gen-Server"
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
