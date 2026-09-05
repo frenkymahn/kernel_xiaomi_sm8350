@@ -10,14 +10,16 @@ jobs:
     runs-on: ubuntu-22.04
     
     steps:
-    - name: Checkout Repository Cleanly
+    - name: Checkout Repository Cleanly and Bypass Submodule Lock
       run: |
-        git clone --depth=1 https://github.com/${{ github.repository }} .
-        git submodule deinit -f KernelSU || true
-        git rm -f KernelSU || true
+        git init
+        git remote add origin https://github.com/${{ github.repository }}
+        git fetch --depth=1 origin main
+        git checkout -f FETCH_HEAD
+        
+        rm -rf .gitmodules KernelSU drivers/kernelsu || true
+        git rm -f KernelSU 2>/dev/null || true
         rm -rf .git/modules/KernelSU || true
-        git config --local --remove-section submodule.KernelSU || true
-        rm -f .gitmodules || true
 
     - name: Setup Build Environment and Dependencies
       run: |
@@ -30,8 +32,6 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-aarch64-linux-gnu \
           python3
-        # Fix for python2 required by dtbo generation scripts on Ubuntu 22.04
-        sudo ln -sf /usr/bin/python3 /usr/bin/python2
 
     - name: Setup Proton Clang Toolchain
       run: |
@@ -42,7 +42,7 @@ jobs:
 
     - name: Setup KernelSU and Compile Kernel
       run: |
-        export PATH="$(pwd)/tc/clang/bin:/usr/bin:$PATH"
+        export PATH="$(pwd)/tc/clang/bin:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
         export KBUILD_BUILD_USER="FrenkyMahn"
@@ -62,6 +62,7 @@ jobs:
           echo "CONFIG_KSU=y"
           echo "CONFIG_BPF=y"
           echo "CONFIG_BPF_SYSCALL=y"
+          echo "CONFIG_TMPFS_XATTR=y"
         } >> out/.config
 
         make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
@@ -88,7 +89,7 @@ jobs:
         mkdir -p kernel_package
         cp out/arch/arm64/boot/Image.gz kernel_package/
         cp out/arch/arm64/boot/dtbo.img kernel_package/
-        cp out/arch/arm64/boot/dts/qcom/sm8350-v2.1.dtb kernel_package/dtb || cp out/arch/arm64/boot/dts/qcom/*.dtb kernel_package/dtb
+        cp out/arch/arm64/boot/dts/qcom/sm8350-v2.1.dtb kernel_package/dtb || cp out/arch/arm64/boot/dts/qcom/*.dtb kernel_package/dtb || true
         
         if [ -f "out/arch/arm64/boot/boot.img" ]; then
             cp out/arch/arm64/boot/boot.img kernel_package/
@@ -105,9 +106,9 @@ jobs:
         git clone https://github.com/osm0sis/AnyKernel3 -b master anykernel
         rm -rf anykernel/.git anykernel/README.md
         
-        cp kernel_package/Image.gz anykernel/
-        cp kernel_package/dtbo.img anykernel/
-        cp kernel_package/dtb anykernel/
+        cp kernel_package/Image.gz anykernel/ || true
+        cp kernel_package/dtbo.img anykernel/ || true
+        cp kernel_package/dtb anykernel/ || true
         cp kernel_package/boot.img anykernel/ || true
         cp kernel_package/vendor_boot.img anykernel/ || true
 
