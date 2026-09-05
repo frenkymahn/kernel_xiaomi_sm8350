@@ -30,6 +30,8 @@ jobs:
           schedtool squashfs-tools xsltproc yasm zip zlib1g-dev \
           android-sdk-libsparse-utils gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-aarch64-linux-gnu \
           python3
+        # Fix for python2 required by dtbo generation scripts on Ubuntu 22.04
+        sudo ln -sf /usr/bin/python3 /usr/bin/python2
 
     - name: Setup Proton Clang Toolchain
       run: |
@@ -40,7 +42,7 @@ jobs:
 
     - name: Setup KernelSU and Compile Kernel
       run: |
-        export PATH="$(pwd)/tc/clang/bin:$PATH"
+        export PATH="$(pwd)/tc/clang/bin:/usr/bin:$PATH"
         export ARCH=arm64
         export SUBARCH=arm64
         export KBUILD_BUILD_USER="FrenkyMahn"
@@ -49,21 +51,23 @@ jobs:
         export CROSS_COMPILE=aarch64-linux-gnu-
         export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
 
-        # Remove symlinks and directly clone the clean KernelSU source into drivers/kernelsu
         rm -rf drivers/kernelsu KernelSU || true
         git clone https://github.com/tiann/KernelSU.git -b main drivers/kernelsu
 
         mkdir -p out
         make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- kangaroox-vili_defconfig
 
-        echo "CONFIG_WERROR=n" >> out/.config
-        echo "CONFIG_KSU=y" >> out/.config
-        echo "CONFIG_BPF=y" >> out/.config
-        echo "CONFIG_BPF_SYSCALL=y" >> out/.config
+        {
+          echo "CONFIG_WERROR=n"
+          echo "CONFIG_KSU=y"
+          echo "CONFIG_BPF=y"
+          echo "CONFIG_BPF_SYSCALL=y"
+        } >> out/.config
 
         make O=out ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
 
         make -j$(nproc --all) O=out \
+            PYTHON=python3 \
             KCFLAGS="-w" \
             LOCALVERSION="-Next-Gen-by-FrenkyMahn" \
             LLVM=1 \
