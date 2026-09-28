@@ -10,6 +10,8 @@ jobs:
     steps:
       - name: Checkout Kernel Source
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Install Build Dependencies
         run: |
@@ -21,26 +23,35 @@ jobs:
 
       - name: Setup Clang Toolchain (AOSP Clang r450784d)
         run: |
-          git clone --depth=1 https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r450784d.git clang
+          mkdir -p clang
+          cd clang
+          curl -LO "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-14.0.0_r1/clang-r450784d.tar.gz"
+          tar -xzf clang-r450784d.tar.gz
+          rm -f clang-r450784d.tar.gz
+          cd ..
 
       - name: Setup KernelSU & Inject Configurations
         run: |
-          # Setup KernelSU
+          # Clean broken submodule residue if any
+          git submodule deinit -f --all || true
+          rm -rf drivers/kernelsu KernelSU
+
+          # Run official KernelSU setup
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
-          # Determine the target defconfig file
+          # Locate defconfig
           DEFCONFIG="arch/arm64/configs/vendor/lahaina-perf_defconfig"
           if [ ! -f "$DEFCONFIG" ]; then
             DEFCONFIG="arch/arm64/configs/vili_defconfig"
           fi
 
-          echo "Target defconfig: $DEFCONFIG"
+          echo "Using defconfig: $DEFCONFIG"
 
           # Inject Localversion
           sed -i '/CONFIG_LOCALVERSION=/d' "$DEFCONFIG"
           echo 'CONFIG_LOCALVERSION="-Next-Gen"' >> "$DEFCONFIG"
 
-          # Inject OverlayFS, XATTR, and KernelSU support flags
+          # Inject required configs
           echo "CONFIG_OVERLAY_FS=y" >> "$DEFCONFIG"
           echo "CONFIG_TMPFS_XATTR=y" >> "$DEFCONFIG"
           echo "CONFIG_KSU=y" >> "$DEFCONFIG"
@@ -56,14 +67,12 @@ jobs:
           export KBUILD_BUILD_USER="Alan"
           export KBUILD_BUILD_HOST="Builder"
 
-          # Check which defconfig to load
           if [ -f "arch/arm64/configs/vendor/lahaina-perf_defconfig" ]; then
             make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vendor/lahaina-perf_defconfig
           else
             make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vili_defconfig
           fi
 
-          # Start compilation
           make -j$(nproc --all) O=out \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
@@ -74,16 +83,14 @@ jobs:
 
       - name: Package with AnyKernel3
         run: |
-          git clone https://github.com/osm0sis/AnyKernel3.git zipper
-          
-          # Copy compiled Image
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git zipper
+
           if [ -f out/arch/arm64/boot/Image ]; then
             cp out/arch/arm64/boot/Image zipper/
           elif [ -f out/arch/arm64/boot/Image.gz ]; then
             cp out/arch/arm64/boot/Image.gz zipper/
           fi
 
-          # Copy DTB if present
           if [ -f out/arch/arm64/boot/dtb ]; then
             cp out/arch/arm64/boot/dtb zipper/
           fi
