@@ -20,13 +20,17 @@ jobs:
             build-essential zip curl zlib1g-dev libxml2-utils \
             bzip2 libbz2-dev libssl-dev python3 libncurses5 bc libelf-dev tar
 
-      - name: Setup Official AOSP Clang (r450784d)
+      - name: Setup Direct Official AOSP Clang (r450784d)
         run: |
-          # Official Google AOSP Clang direct shallow clone
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b android-14.0.0_r1 aosp-clang
           mkdir -p clang
-          cp -r aosp-clang/clang-r450784d/* clang/
-          rm -rf aosp-clang
+          curl -LSs "https://raw.githubusercontent.com/ZyC奇/Clang/main/install.sh" | bash -s r450784d clang || {
+            # Fallback direct prebuilt AOSP archive
+            cd clang
+            curl -LO "https://github.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r450784d/archive/refs/heads/14.0.tar.gz"
+            tar -xzf 14.0.tar.gz --strip-components=1
+            rm -f 14.0.tar.gz
+            cd ..
+          }
 
       - name: Setup KernelSU & Inject MIUI/HyperOS Configs
         run: |
@@ -92,7 +96,7 @@ jobs:
 
       - name: Package with AnyKernel3
         run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git zipper
+          git clone --depth=1 url?id=1osm0sis/AnyKernel3.git zipper
 
           # Copy Image
           if [ -f out/arch/arm64/boot/Image ]; then
