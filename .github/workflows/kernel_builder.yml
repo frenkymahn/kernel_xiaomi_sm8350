@@ -18,21 +18,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git ccache automake flex lzop bison gperf \
             build-essential zip curl zlib1g-dev libxml2-utils \
-            bzip2 libbz2-dev libssl-dev python3 libncurses5 bc libelf-dev tar
+            bzip2 libbz2-dev libssl-dev python3 libncurses5 bc libelf-dev tar \
+            binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Setup Direct Official AOSP Clang
         run: |
-          # Clone direct official prebuilt AOSP Clang without web-download/curl errors
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b master-kernel-build-2022 clang-prebuilts || \
-          git clone --depth=1 https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r450784d.git clang
-
-          if [ ! -d "clang" ]; then
-            mkdir -p clang
-            # Select latest available clang in repo
-            LATEST_CLANG=$(ls -d clang-prebuilts/clang-r* | tail -n 1)
-            cp -r $LATEST_CLANG/* clang/
-            rm -rf clang-prebuilts
-          fi
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b master-kernel-build-2022 clang-prebuilts
+          mkdir -p clang
+          LATEST_CLANG=$(ls -d clang-prebuilts/clang-r* | tail -n 1)
+          cp -r $LATEST_CLANG/* clang/
+          rm -rf clang-prebuilts
 
       - name: Setup KernelSU & Inject MIUI/HyperOS Configs
         run: |
@@ -43,10 +39,10 @@ jobs:
           # Run official KernelSU setup
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
-          # Find target defconfig
-          DEFCONFIG="arch/arm64/configs/vendor/lahaina-perf_defconfig"
+          # Explicit defconfig in repository
+          DEFCONFIG="arch/arm64/configs/vendor/kangaroox-vili_defconfig"
           if [ ! -f "$DEFCONFIG" ]; then
-            DEFCONFIG=$(find arch/arm64/configs -name "*lahaina-perf*" -o -name "*vili*" | head -n 1)
+            DEFCONFIG=$(find arch/arm64/configs -name "*kangaroox-vili*" -o -name "*vili*" | head -n 1)
           fi
 
           echo "Target defconfig: $DEFCONFIG"
@@ -80,21 +76,21 @@ jobs:
           export KBUILD_BUILD_USER="FrenkyMahn"
           export KBUILD_BUILD_HOST="Builder"
 
-          # Defconfig load
+          # Load target defconfig
           if [ -f "arch/arm64/configs/vendor/$DEFCONFIG_NAME" ]; then
-            make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- "vendor/$DEFCONFIG_NAME"
+            make O=out CC=clang "vendor/$DEFCONFIG_NAME"
           else
-            make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- "$DEFCONFIG_NAME"
+            make O=out CC=clang "$DEFCONFIG_NAME"
           fi
 
-          # Compile Image
+          # Compile Image & DTB with LLVM
           make -j$(nproc --all) O=out \
+            ARCH=arm64 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy \
-            LD=ld.lld
+            LLVM=1 \
+            LLVM_IAS=1
 
       - name: Package with AnyKernel3
         run: |
