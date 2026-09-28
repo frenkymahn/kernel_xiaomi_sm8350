@@ -34,13 +34,28 @@ jobs:
           # Run official KernelSU setup
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
-          # Locate defconfig
-          DEFCONFIG="arch/arm64/configs/vendor/lahaina-perf_defconfig"
-          if [ ! -f "$DEFCONFIG" ]; then
-            DEFCONFIG="arch/arm64/configs/vili_defconfig"
+          # Dynamically find the correct defconfig file
+          DEFCONFIG=""
+          for cfg in "arch/arm64/configs/vendor/lahaina-perf_defconfig" \
+                     "arch/arm64/configs/vendor/lahaina_defconfig" \
+                     "arch/arm64/configs/vendor/vili_defconfig" \
+                     "arch/arm64/configs/vendor/vili-perf_defconfig" \
+                     "arch/arm64/configs/lahaina-perf_defconfig" \
+                     "arch/arm64/configs/vili_defconfig"; do
+            if [ -f "$cfg" ]; then
+              DEFCONFIG="$cfg"
+              break
+            fi
+          done
+
+          if [ -z "$DEFCONFIG" ]; then
+            # Search if not found in standard paths
+            DEFCONFIG=$(find arch/arm64/configs -name "*lahaina-perf*" -o -name "*vili*" | head -n 1)
           fi
 
           echo "Using defconfig: $DEFCONFIG"
+          echo "TARGET_DEFCONFIG_FILE=$DEFCONFIG" >> $GITHUB_ENV
+          echo "DEFCONFIG_NAME=$(basename $DEFCONFIG)" >> $GITHUB_ENV
 
           # Inject Localversion
           sed -i '/CONFIG_LOCALVERSION=/d' "$DEFCONFIG"
@@ -62,12 +77,14 @@ jobs:
           export KBUILD_BUILD_USER="Alan"
           export KBUILD_BUILD_HOST="Builder"
 
-          if [ -f "arch/arm64/configs/vendor/lahaina-perf_defconfig" ]; then
-            make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vendor/lahaina-perf_defconfig
+          # Load defconfig
+          if [ -f "arch/arm64/configs/vendor/$DEFCONFIG_NAME" ]; then
+            make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- "vendor/$DEFCONFIG_NAME"
           else
-            make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- vili_defconfig
+            make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- "$DEFCONFIG_NAME"
           fi
 
+          # Build Image
           make -j$(nproc --all) O=out \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
