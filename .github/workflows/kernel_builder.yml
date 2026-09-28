@@ -13,6 +13,14 @@ jobs:
         with:
           submodules: false
 
+      - name: Purge Broken Submodules
+        run: |
+          # Remove broken .gitmodules and KernelSU traces completely
+          git config --file .gitmodules --remove-section submodule.KernelSU 2>/dev/null || true
+          rm -f .gitmodules
+          rm -rf drivers/kernelsu KernelSU
+          git submodule deinit -f --all 2>/dev/null || true
+
       - name: Install Essential Dependencies
         run: |
           sudo apt-get update
@@ -20,7 +28,7 @@ jobs:
             build-essential zip curl zlib1g-dev libxml2-utils \
             bzip2 libbz2-dev libssl-dev python3 libncurses5 bc libelf-dev tar \
             binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi libssl-dev
 
       - name: Setup Direct Official AOSP Clang
         run: |
@@ -32,11 +40,7 @@ jobs:
 
       - name: Setup KernelSU & Inject MIUI/HyperOS Configs
         run: |
-          # Clean broken submodule traces
-          git submodule deinit -f --all || true
-          rm -rf drivers/kernelsu KernelSU
-
-          # Run official KernelSU setup
+          # Fresh KernelSU setup
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
           # Explicit defconfig in repository
@@ -76,21 +80,25 @@ jobs:
           export KBUILD_BUILD_USER="FrenkyMahn"
           export KBUILD_BUILD_HOST="Builder"
 
-          # Load target defconfig
+          # 1. Defconfig Load
           if [ -f "arch/arm64/configs/vendor/$DEFCONFIG_NAME" ]; then
-            make O=out CC=clang "vendor/$DEFCONFIG_NAME"
+            make O=out ARCH=arm64 CC=clang vendor/$DEFCONFIG_NAME
           else
-            make O=out CC=clang "$DEFCONFIG_NAME"
+            make O=out ARCH=arm64 CC=clang $DEFCONFIG_NAME
           fi
 
-          # Compile Image & DTB with LLVM
+          # 2. Fix Qualcomm techpack headers pre-install
+          make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1 headers_install || true
+
+          # 3. Direct Image & DTB build
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             LLVM=1 \
-            LLVM_IAS=1
+            LLVM_IAS=1 \
+            Image dtbs
 
       - name: Package with AnyKernel3
         run: |
@@ -103,10 +111,9 @@ jobs:
             cp out/arch/arm64/boot/Image.gz zipper/
           fi
 
-          # Copy DTB
-          if [ -f out/arch/arm64/boot/dtb ]; then
-            cp out/arch/arm64/boot/dtb zipper/
-          fi
+          # Copy DTB / DTBO
+          find out/arch/arm64/boot/dts -name "*.dtb" -exec cp {} zipper/dtb \; 2>/dev/null || true
+          [ -f out/arch/arm64/boot/dtb ] && cp out/arch/arm64/boot/dtb zipper/
 
           cd zipper
           zip -r9 ../Next-Gen-HyperOS-Vili.zip * -x .git README.md
