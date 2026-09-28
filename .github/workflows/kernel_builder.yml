@@ -21,13 +21,13 @@ jobs:
             bzip2 libbz2-dev libssl-dev python3 libncurses5 bc libelf-dev \
             clang lld llvm
 
-      - name: Setup Clang Toolchain (AOSP Clang r450784d)
+      - name: Setup Clang Toolchain (Proton Clang)
         run: |
-          git clone --depth=1 https://github.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r450784d.git clang
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
 
       - name: Setup KernelSU & Inject Configurations
         run: |
-          # Clean broken submodule residue if any
+          # Clean broken submodule residue
           git submodule deinit -f --all || true
           rm -rf drivers/kernelsu KernelSU
 
