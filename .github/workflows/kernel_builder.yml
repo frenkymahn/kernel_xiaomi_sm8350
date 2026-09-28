@@ -15,20 +15,19 @@ jobs:
 
       - name: Purge Broken Submodules
         run: |
-          # Remove broken .gitmodules and KernelSU traces completely
-          git config --file .gitmodules --remove-section submodule.KernelSU 2>/dev/null || true
-          rm -f .gitmodules
-          rm -rf drivers/kernelsu KernelSU
           git submodule deinit -f --all 2>/dev/null || true
+          git config --file .gitmodules --remove-section submodule.KernelSU 2>/dev/null || true
+          git config --remove-section submodule.KernelSU 2>/dev/null || true
+          rm -rf .git/modules/KernelSU .gitmodules drivers/kernelsu KernelSU
 
       - name: Install Essential Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y git ccache automake flex lzop bison gperf \
-            build-essential zip curl zlib1g-dev libxml2-utils \
+            build-essential zip curl zlib1g-dev libxml2-utils device-tree-compiler \
             bzip2 libbz2-dev libssl-dev python3 libncurses5 bc libelf-dev tar \
             binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi libssl-dev
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Setup Direct Official AOSP Clang
         run: |
@@ -40,7 +39,7 @@ jobs:
 
       - name: Setup KernelSU & Inject MIUI/HyperOS Configs
         run: |
-          # Fresh KernelSU setup
+          # Official KernelSU setup
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
           # Explicit defconfig in repository
@@ -80,17 +79,14 @@ jobs:
           export KBUILD_BUILD_USER="FrenkyMahn"
           export KBUILD_BUILD_HOST="Builder"
 
-          # 1. Defconfig Load
+          # Load defconfig
           if [ -f "arch/arm64/configs/vendor/$DEFCONFIG_NAME" ]; then
-            make O=out ARCH=arm64 CC=clang vendor/$DEFCONFIG_NAME
+            make O=out CC=clang "vendor/$DEFCONFIG_NAME"
           else
-            make O=out ARCH=arm64 CC=clang $DEFCONFIG_NAME
+            make O=out CC=clang "$DEFCONFIG_NAME"
           fi
 
-          # 2. Fix Qualcomm techpack headers pre-install
-          make O=out ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1 headers_install || true
-
-          # 3. Direct Image & DTB build
+          # Build Image, Image.gz and dtb
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
@@ -98,23 +94,32 @@ jobs:
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             LLVM=1 \
             LLVM_IAS=1 \
-            Image dtbs
+            Image.gz dtbs
 
       - name: Package with AnyKernel3
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git zipper
 
-          # Copy Image
-          if [ -f out/arch/arm64/boot/Image ]; then
-            cp out/arch/arm64/boot/Image zipper/
-          elif [ -f out/arch/arm64/boot/Image.gz ]; then
+          # Configure AnyKernel3 script specifically for Xiaomi 11T Pro (vili)
+          sed -i 's/do.devicecheck=1/do.devicecheck=1/g' zipper/anykernel.sh
+          sed -i 's/device.name1=.*/device.name1=vili/g' zipper/anykernel.sh
+          sed -i 's/device.name2=.*/device.name2=vili_in/g' zipper/anykernel.sh
+          sed -i 's/device.name3=.*/device.name3=2107113SI/g' zipper/anykernel.sh
+          sed -i 's/device.name4=.*/device.name4=2107113SG/g' zipper/anykernel.sh
+          sed -i 's/is_slot_device=0/is_slot_device=1/g' zipper/anykernel.sh
+
+          # Copy Image.gz or Image
+          if [ -f out/arch/arm64/boot/Image.gz ]; then
             cp out/arch/arm64/boot/Image.gz zipper/
+          elif [ -f out/arch/arm64/boot/Image ]; then
+            cp out/arch/arm64/boot/Image zipper/
           fi
 
-          # Copy DTB / DTBO
-          find out/arch/arm64/boot/dts -name "*.dtb" -exec cp {} zipper/dtb \; 2>/dev/null || true
-          [ -f out/arch/arm64/boot/dtb ] && cp out/arch/arm64/boot/dtb zipper/
+          # Find and copy DTB
+          find out/arch/arm64/boot/dts/vendor/qcom -name "*sm8350*.dtb" -exec cat {} + > zipper/dtb 2>/dev/null || true
+          [ ! -s zipper/dtb ] && [ -f out/arch/arm64/boot/dtb ] && cp out/arch/arm64/boot/dtb zipper/dtb
 
+          # Generate flashable zip
           cd zipper
           zip -r9 ../Next-Gen-HyperOS-Vili.zip * -x .git README.md
 
