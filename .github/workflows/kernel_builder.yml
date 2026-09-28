@@ -19,11 +19,11 @@ jobs:
           sudo apt-get install -y git ccache automake flex lzop bison gperf \
             build-essential zip curl zlib1g-dev g++-multilib libxml2-utils \
             bzip2 libbz2-dev libssl-dev python3 libncurses5 bc libelf-dev \
-            clang lld llvm
+            clang lld llvm gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Setup Clang Toolchain (Proton Clang)
         run: |
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git clang
+          git clone --depth=1 url?id=1kdrag0n/proton-clang.git clang
 
       - name: Setup KernelSU & Inject Configurations
         run: |
@@ -34,14 +34,12 @@ jobs:
           # Run official KernelSU setup
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
-          # Dynamically find the correct defconfig file
+          # Dynamically find defconfig
           DEFCONFIG=""
           for cfg in "arch/arm64/configs/vendor/lahaina-perf_defconfig" \
                      "arch/arm64/configs/vendor/lahaina_defconfig" \
-                     "arch/arm64/configs/vendor/vili_defconfig" \
                      "arch/arm64/configs/vendor/vili-perf_defconfig" \
-                     "arch/arm64/configs/lahaina-perf_defconfig" \
-                     "arch/arm64/configs/vili_defconfig"; do
+                     "arch/arm64/configs/vendor/vili_defconfig"; do
             if [ -f "$cfg" ]; then
               DEFCONFIG="$cfg"
               break
@@ -49,11 +47,10 @@ jobs:
           done
 
           if [ -z "$DEFCONFIG" ]; then
-            # Search if not found in standard paths
             DEFCONFIG=$(find arch/arm64/configs -name "*lahaina-perf*" -o -name "*vili*" | head -n 1)
           fi
 
-          echo "Using defconfig: $DEFCONFIG"
+          echo "Target defconfig: $DEFCONFIG"
           echo "TARGET_DEFCONFIG_FILE=$DEFCONFIG" >> $GITHUB_ENV
           echo "DEFCONFIG_NAME=$(basename $DEFCONFIG)" >> $GITHUB_ENV
 
@@ -61,7 +58,7 @@ jobs:
           sed -i '/CONFIG_LOCALVERSION=/d' "$DEFCONFIG"
           echo 'CONFIG_LOCALVERSION="-Next-Gen"' >> "$DEFCONFIG"
 
-          # Inject required configs
+          # Inject configs
           echo "CONFIG_OVERLAY_FS=y" >> "$DEFCONFIG"
           echo "CONFIG_TMPFS_XATTR=y" >> "$DEFCONFIG"
           echo "CONFIG_KSU=y" >> "$DEFCONFIG"
@@ -79,19 +76,19 @@ jobs:
 
           # Load defconfig
           if [ -f "arch/arm64/configs/vendor/$DEFCONFIG_NAME" ]; then
-            make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- "vendor/$DEFCONFIG_NAME"
+            make O=out ARCH=arm64 CC=clang "vendor/$DEFCONFIG_NAME"
           else
-            make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- "$DEFCONFIG_NAME"
+            make O=out ARCH=arm64 CC=clang "$DEFCONFIG_NAME"
           fi
 
-          # Build Image
+          # Build Image with LLVM integration
           make -j$(nproc --all) O=out \
+            ARCH=arm64 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy \
-            LD=ld.lld
+            LLVM=1 \
+            LLVM_IAS=1
 
       - name: Package with AnyKernel3
         run: |
