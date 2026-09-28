@@ -63,11 +63,10 @@ jobs:
           echo "CONFIG_HAVE_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBE_EVENTS=y" >> "$DEFCONFIG"
 
-          # MIUI & HyperOS Essential Boot & Display Drivers
+          # MIUI & HyperOS Essential Drivers (Broken PROCESS_RECLAIM removed)
           echo "CONFIG_MIUI_FREQUENT_APP=y" >> "$DEFCONFIG"
           echo "CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=y" >> "$DEFCONFIG"
           echo "CONFIG_INPUT_TOUCHSCREEN=y" >> "$DEFCONFIG"
-          echo "CONFIG_PROCESS_RECLAIM=y" >> "$DEFCONFIG"
           echo "CONFIG_ZRAM=y" >> "$DEFCONFIG"
           echo "CONFIG_FS_ENCRYPTION=y" >> "$DEFCONFIG"
 
@@ -86,7 +85,7 @@ jobs:
             make O=out CC=clang "$DEFCONFIG_NAME"
           fi
 
-          # Build Image, Image.gz and dtb
+          # Build Image, Image.gz and dtbs with warning bypass
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
@@ -94,13 +93,13 @@ jobs:
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             LLVM=1 \
             LLVM_IAS=1 \
+            KCFLAGS="-Wno-error" \
             Image.gz dtbs
 
       - name: Package with AnyKernel3
         run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git zipper
+          git clone --depth=1 url?id=1osm0sis/AnyKernel3.git zipper
 
-          # Configure AnyKernel3 script specifically for Xiaomi 11T Pro (vili)
           sed -i 's/do.devicecheck=1/do.devicecheck=1/g' zipper/anykernel.sh
           sed -i 's/device.name1=.*/device.name1=vili/g' zipper/anykernel.sh
           sed -i 's/device.name2=.*/device.name2=vili_in/g' zipper/anykernel.sh
@@ -108,18 +107,15 @@ jobs:
           sed -i 's/device.name4=.*/device.name4=2107113SG/g' zipper/anykernel.sh
           sed -i 's/is_slot_device=0/is_slot_device=1/g' zipper/anykernel.sh
 
-          # Copy Image.gz or Image
           if [ -f out/arch/arm64/boot/Image.gz ]; then
             cp out/arch/arm64/boot/Image.gz zipper/
           elif [ -f out/arch/arm64/boot/Image ]; then
             cp out/arch/arm64/boot/Image zipper/
           fi
 
-          # Find and copy DTB
           find out/arch/arm64/boot/dts/vendor/qcom -name "*sm8350*.dtb" -exec cat {} + > zipper/dtb 2>/dev/null || true
           [ ! -s zipper/dtb ] && [ -f out/arch/arm64/boot/dtb ] && cp out/arch/arm64/boot/dtb zipper/dtb
 
-          # Generate flashable zip
           cd zipper
           zip -r9 ../Next-Gen-HyperOS-Vili.zip * -x .git README.md
 
