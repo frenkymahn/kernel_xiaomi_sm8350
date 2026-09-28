@@ -20,14 +20,13 @@ jobs:
             build-essential zip curl zlib1g-dev libxml2-utils \
             bzip2 libbz2-dev libssl-dev python3 libncurses5 bc libelf-dev tar
 
-      - name: Download & Extract Direct AOSP Clang (r450784d)
+      - name: Setup Official AOSP Clang (r450784d)
         run: |
+          # Official Google AOSP Clang direct shallow clone
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b android-14.0.0_r1 aosp-clang
           mkdir -p clang
-          cd clang
-          curl -L "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-14.0.0_r1/clang-r450784d.tar.gz" -o clang.tar.gz
-          tar -zxf clang.tar.gz
-          rm -f clang.tar.gz
-          cd ..
+          cp -r aosp-clang/clang-r450784d/* clang/
+          rm -rf aosp-clang
 
       - name: Setup KernelSU & Inject MIUI/HyperOS Configs
         run: |
