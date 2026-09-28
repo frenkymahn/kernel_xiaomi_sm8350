@@ -37,12 +37,24 @@ jobs:
           cp -r $LATEST_CLANG/* clang/
           rm -rf clang-prebuilts
 
-      - name: Setup KernelSU & Inject MIUI/HyperOS Configs
+      - name: Integrate KernelSU Properly
         run: |
-          # Official KernelSU setup
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+          # Clone KernelSU source directly to drivers/kernelsu
+          rm -rf drivers/kernelsu
+          git clone --depth=1 https://github.com/tiann/KernelSU.git drivers/kernelsu
 
-          # Explicit defconfig in repository
+          # Ensure drivers/Makefile has KernelSU entry
+          if ! grep -q "obj-\$(CONFIG_KSU) += kernelsu/" drivers/Makefile; then
+            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+          fi
+
+          # Ensure drivers/Kconfig sources KernelSU Kconfig
+          if ! grep -q "source \"drivers/kernelsu/Kconfig\"" drivers/Kconfig; then
+            sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+          fi
+
+      - name: Inject Configurations
+        run: |
           DEFCONFIG="arch/arm64/configs/vendor/kangaroox-vili_defconfig"
           if [ ! -f "$DEFCONFIG" ]; then
             DEFCONFIG=$(find arch/arm64/configs -name "*kangaroox-vili*" -o -name "*vili*" | head -n 1)
@@ -56,14 +68,15 @@ jobs:
           echo 'CONFIG_LOCALVERSION="-Next-Gen"' >> "$DEFCONFIG"
 
           # User requested configs & KernelSU
+          sed -i '/CONFIG_KSU/d' "$DEFCONFIG"
+          echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           echo "CONFIG_OVERLAY_FS=y" >> "$DEFCONFIG"
           echo "CONFIG_TMPFS_XATTR=y" >> "$DEFCONFIG"
-          echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_HAVE_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBE_EVENTS=y" >> "$DEFCONFIG"
 
-          # MIUI & HyperOS Essential Drivers (Broken PROCESS_RECLAIM removed)
+          # MIUI & HyperOS Essential Drivers
           echo "CONFIG_MIUI_FREQUENT_APP=y" >> "$DEFCONFIG"
           echo "CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=y" >> "$DEFCONFIG"
           echo "CONFIG_INPUT_TOUCHSCREEN=y" >> "$DEFCONFIG"
@@ -85,7 +98,12 @@ jobs:
             make O=out CC=clang "$DEFCONFIG_NAME"
           fi
 
-          # Build Image, Image.gz and dtbs with warning bypass
+          # Ensure CONFIG_KSU=y is active in the generated .config
+          scripts/config --file out/.config -e KSU
+          scripts/config --file out/.config -e OVERLAY_FS
+          scripts/config --file out/.config -e TMPFS_XATTR
+
+          # Build Image, Image.gz and dtbs
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
@@ -98,7 +116,7 @@ jobs:
 
       - name: Package with AnyKernel3
         run: |
-          git clone --depth=1 url?id=1osm0sis/AnyKernel3.git zipper
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git zipper
 
           sed -i 's/do.devicecheck=1/do.devicecheck=1/g' zipper/anykernel.sh
           sed -i 's/device.name1=.*/device.name1=vili/g' zipper/anykernel.sh
