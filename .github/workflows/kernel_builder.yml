@@ -23,12 +23,7 @@ jobs:
 
       - name: Setup Clang Toolchain (AOSP Clang r450784d)
         run: |
-          mkdir -p clang
-          cd clang
-          curl -LO "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-14.0.0_r1/clang-r450784d.tar.gz"
-          tar -xzf clang-r450784d.tar.gz
-          rm -f clang-r450784d.tar.gz
-          cd ..
+          git clone --depth=1 https://github.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r450784d.git clang
 
       - name: Setup KernelSU & Inject Configurations
         run: |
