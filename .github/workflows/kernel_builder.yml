@@ -1,4 +1,4 @@
-name: Build Next-Gen Kernel for Vili
+name: Build Next-Gen Kernel for Vili (MIUI & HyperOS Only)
 
 on:
   workflow_dispatch:
@@ -13,52 +13,45 @@ jobs:
         with:
           submodules: false
 
-      - name: Install Build Dependencies
+      - name: Install Essential Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y git ccache automake flex lzop bison gperf \
-            build-essential zip curl zlib1g-dev g++-multilib libxml2-utils \
-            bzip2 libbz2-dev libssl-dev python3 libncurses5 bc libelf-dev \
-            clang lld llvm gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+            build-essential zip curl zlib1g-dev libxml2-utils \
+            bzip2 libbz2-dev libssl-dev python3 libncurses5 bc libelf-dev tar
 
-      - name: Setup Clang Toolchain (Proton Clang)
+      - name: Download & Extract Direct AOSP Clang (r450784d)
         run: |
-          git clone --depth=1 url?id=1kdrag0n/proton-clang.git clang
+          mkdir -p clang
+          cd clang
+          curl -L "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-14.0.0_r1/clang-r450784d.tar.gz" -o clang.tar.gz
+          tar -zxf clang.tar.gz
+          rm -f clang.tar.gz
+          cd ..
 
-      - name: Setup KernelSU & Inject Configurations
+      - name: Setup KernelSU & Inject MIUI/HyperOS Configs
         run: |
-          # Clean broken submodule residue
+          # Clean broken submodule traces
           git submodule deinit -f --all || true
           rm -rf drivers/kernelsu KernelSU
 
           # Run official KernelSU setup
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
-          # Dynamically find defconfig
-          DEFCONFIG=""
-          for cfg in "arch/arm64/configs/vendor/lahaina-perf_defconfig" \
-                     "arch/arm64/configs/vendor/lahaina_defconfig" \
-                     "arch/arm64/configs/vendor/vili-perf_defconfig" \
-                     "arch/arm64/configs/vendor/vili_defconfig"; do
-            if [ -f "$cfg" ]; then
-              DEFCONFIG="$cfg"
-              break
-            fi
-          done
-
-          if [ -z "$DEFCONFIG" ]; then
+          # Find target defconfig
+          DEFCONFIG="arch/arm64/configs/vendor/lahaina-perf_defconfig"
+          if [ ! -f "$DEFCONFIG" ]; then
             DEFCONFIG=$(find arch/arm64/configs -name "*lahaina-perf*" -o -name "*vili*" | head -n 1)
           fi
 
           echo "Target defconfig: $DEFCONFIG"
-          echo "TARGET_DEFCONFIG_FILE=$DEFCONFIG" >> $GITHUB_ENV
           echo "DEFCONFIG_NAME=$(basename $DEFCONFIG)" >> $GITHUB_ENV
 
-          # Inject Localversion
+          # Inject Localversion (-Next-Gen)
           sed -i '/CONFIG_LOCALVERSION=/d' "$DEFCONFIG"
           echo 'CONFIG_LOCALVERSION="-Next-Gen"' >> "$DEFCONFIG"
 
-          # Inject configs
+          # User requested configs & KernelSU
           echo "CONFIG_OVERLAY_FS=y" >> "$DEFCONFIG"
           echo "CONFIG_TMPFS_XATTR=y" >> "$DEFCONFIG"
           echo "CONFIG_KSU=y" >> "$DEFCONFIG"
@@ -66,49 +59,59 @@ jobs:
           echo "CONFIG_HAVE_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBE_EVENTS=y" >> "$DEFCONFIG"
 
+          # MIUI & HyperOS Essential Boot & Display Drivers
+          echo "CONFIG_MIUI_FREQUENT_APP=y" >> "$DEFCONFIG"
+          echo "CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=y" >> "$DEFCONFIG"
+          echo "CONFIG_INPUT_TOUCHSCREEN=y" >> "$DEFCONFIG"
+          echo "CONFIG_PROCESS_RECLAIM=y" >> "$DEFCONFIG"
+          echo "CONFIG_ZRAM=y" >> "$DEFCONFIG"
+          echo "CONFIG_FS_ENCRYPTION=y" >> "$DEFCONFIG"
+
       - name: Compile Kernel
         run: |
           export PATH="${GITHUB_WORKSPACE}/clang/bin:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
-          export KBUILD_BUILD_USER="Alan"
+          export KBUILD_BUILD_USER="FrenkyMahn"
           export KBUILD_BUILD_HOST="Builder"
 
-          # Load defconfig
+          # Defconfig load
           if [ -f "arch/arm64/configs/vendor/$DEFCONFIG_NAME" ]; then
-            make O=out ARCH=arm64 CC=clang "vendor/$DEFCONFIG_NAME"
+            make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- "vendor/$DEFCONFIG_NAME"
           else
-            make O=out ARCH=arm64 CC=clang "$DEFCONFIG_NAME"
+            make O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- "$DEFCONFIG_NAME"
           fi
 
-          # Build Image with LLVM integration
+          # Compile Image
           make -j$(nproc --all) O=out \
-            ARCH=arm64 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            LLVM=1 \
-            LLVM_IAS=1
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            LD=ld.lld
 
       - name: Package with AnyKernel3
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git zipper
 
+          # Copy Image
           if [ -f out/arch/arm64/boot/Image ]; then
             cp out/arch/arm64/boot/Image zipper/
           elif [ -f out/arch/arm64/boot/Image.gz ]; then
             cp out/arch/arm64/boot/Image.gz zipper/
           fi
 
+          # Copy DTB
           if [ -f out/arch/arm64/boot/dtb ]; then
             cp out/arch/arm64/boot/dtb zipper/
           fi
 
           cd zipper
-          zip -r9 ../Next-Gen-KangarooX-Vili-HyperOS.zip * -x .git README.md
+          zip -r9 ../Next-Gen-HyperOS-Vili.zip * -x .git README.md
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Next-Gen-Kernel-Vili
-          path: Next-Gen-KangarooX-Vili-HyperOS.zip
+          name: Next-Gen-HyperOS-Vili
+          path: Next-Gen-HyperOS-Vili.zip
