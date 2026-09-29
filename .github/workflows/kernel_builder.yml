@@ -39,18 +39,12 @@ jobs:
 
       - name: Setup Matching KernelSU Drivers
         run: |
-          # Clone KernelSU v0.9.5 which exactly matches the ksu_handle_* hooks in your fs/ files
-          rm -rf drivers/kernelsu
-          git clone --depth=1 -b v0.9.5 https://github.com/tiann/KernelSU.git drivers/kernelsu
+          # Official setup script replaces manual hooks and wires drivers correctly
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
-          # Ensure drivers/Makefile builds KernelSU
-          if ! grep -q "obj-\$(CONFIG_KSU) += kernelsu/" drivers/Makefile; then
-            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
-          fi
-
-          # Fix Kconfig path if required
-          if [ -f "drivers/kernelsu/kernel/Kconfig" ] && [ ! -f "drivers/kernelsu/Kconfig" ]; then
-            ln -s kernel/Kconfig drivers/kernelsu/Kconfig
+          # Ensure drivers/kernelsu points directly to the real driver root
+          if [ -d "KernelSU" ] && [ ! -d "drivers/kernelsu" ]; then
+            ln -s ../KernelSU/kernel drivers/kernelsu
           fi
 
       - name: Inject Configurations
@@ -67,11 +61,10 @@ jobs:
           sed -i '/CONFIG_LOCALVERSION=/d' "$DEFCONFIG"
           echo 'CONFIG_LOCALVERSION="-Next-Gen"' >> "$DEFCONFIG"
 
-          # Required configurations
-          sed -i '/CONFIG_KSU/d' "$DEFCONFIG"
-          echo "CONFIG_KSU=y" >> "$DEFCONFIG"
+          # Configurations
           echo "CONFIG_OVERLAY_FS=y" >> "$DEFCONFIG"
           echo "CONFIG_TMPFS_XATTR=y" >> "$DEFCONFIG"
+          echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_HAVE_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBE_EVENTS=y" >> "$DEFCONFIG"
@@ -98,7 +91,7 @@ jobs:
             make O=out CC=clang "$DEFCONFIG_NAME"
           fi
 
-          # Force CONFIG_KSU in generated .config
+          # Enable KSU in generated .config
           scripts/config --file out/.config -e KSU
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -e TMPFS_XATTR
