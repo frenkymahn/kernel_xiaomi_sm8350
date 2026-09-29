@@ -37,21 +37,10 @@ jobs:
           cp -r $LATEST_CLANG/* clang/
           rm -rf clang-prebuilts
 
-      - name: Integrate KernelSU Properly
+      - name: Setup KernelSU
         run: |
-          # Clone KernelSU source directly to drivers/kernelsu
-          rm -rf drivers/kernelsu
-          git clone --depth=1 https://github.com/tiann/KernelSU.git drivers/kernelsu
-
-          # Ensure drivers/Makefile has KernelSU entry
-          if ! grep -q "obj-\$(CONFIG_KSU) += kernelsu/" drivers/Makefile; then
-            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
-          fi
-
-          # Ensure drivers/Kconfig sources KernelSU Kconfig
-          if ! grep -q "source \"drivers/kernelsu/Kconfig\"" drivers/Kconfig; then
-            sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
-          fi
+          # Official KernelSU installation
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
       - name: Inject Configurations
         run: |
@@ -63,20 +52,19 @@ jobs:
           echo "Target defconfig: $DEFCONFIG"
           echo "DEFCONFIG_NAME=$(basename $DEFCONFIG)" >> $GITHUB_ENV
 
-          # Inject Localversion (-Next-Gen)
+          # Inject Localversion
           sed -i '/CONFIG_LOCALVERSION=/d' "$DEFCONFIG"
           echo 'CONFIG_LOCALVERSION="-Next-Gen"' >> "$DEFCONFIG"
 
-          # User requested configs & KernelSU
-          sed -i '/CONFIG_KSU/d' "$DEFCONFIG"
-          echo "CONFIG_KSU=y" >> "$DEFCONFIG"
+          # Configurations
           echo "CONFIG_OVERLAY_FS=y" >> "$DEFCONFIG"
           echo "CONFIG_TMPFS_XATTR=y" >> "$DEFCONFIG"
+          echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_HAVE_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBE_EVENTS=y" >> "$DEFCONFIG"
 
-          # MIUI & HyperOS Essential Drivers
+          # MIUI & HyperOS Essentials
           echo "CONFIG_MIUI_FREQUENT_APP=y" >> "$DEFCONFIG"
           echo "CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=y" >> "$DEFCONFIG"
           echo "CONFIG_INPUT_TOUCHSCREEN=y" >> "$DEFCONFIG"
@@ -91,19 +79,14 @@ jobs:
           export KBUILD_BUILD_USER="FrenkyMahn"
           export KBUILD_BUILD_HOST="Builder"
 
-          # Load defconfig
+          # Defconfig load
           if [ -f "arch/arm64/configs/vendor/$DEFCONFIG_NAME" ]; then
             make O=out CC=clang "vendor/$DEFCONFIG_NAME"
           else
             make O=out CC=clang "$DEFCONFIG_NAME"
           fi
 
-          # Ensure CONFIG_KSU=y is active in the generated .config
-          scripts/config --file out/.config -e KSU
-          scripts/config --file out/.config -e OVERLAY_FS
-          scripts/config --file out/.config -e TMPFS_XATTR
-
-          # Build Image, Image.gz and dtbs
+          # Compile Image & dtbs
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
