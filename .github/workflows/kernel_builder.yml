@@ -37,40 +37,12 @@ jobs:
           cp -r $LATEST_CLANG/* clang/
           rm -rf clang-prebuilts
 
-      - name: Fix Undefined KSU Hooks In Filesystem
+      - name: Setup KernelSU Properly
         run: |
-          # 1. Setup official KernelSU
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main || true
+          # Official setup script wires drivers and links hooks cleanly
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
-          # 2. Guarantee ksu_handle symbols exist in fs/ to completely prevent linker undefined symbol error
-          cat << 'EOF' > fs/ksu_stubs.c
-          #include <linux/types.h>
-          #include <linux/fs.h>
-          #include <linux/stat.h>
-
-          int __attribute__((weak)) ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *flags) {
-              return 0;
-          }
-
-          int __attribute__((weak)) ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *count_ptr, loff_t **pos) {
-              return 0;
-          }
-
-          int __attribute__((weak)) ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags) {
-              return 0;
-          }
-
-          int __attribute__((weak)) ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, void *envp, int *flags) {
-              return 0;
-          }
-          EOF
-
-          # Append ksu_stubs.o to fs/Makefile so it always gets built into fs/built-in.a
-          if ! grep -q "ksu_stubs.o" fs/Makefile; then
-            echo 'obj-y += ksu_stubs.o' >> fs/Makefile
-          fi
-
-      - name: Inject Configurations
+      - name: Inject HyperOS Configurations
         run: |
           DEFCONFIG="arch/arm64/configs/vendor/kangaroox-vili_defconfig"
           if [ ! -f "$DEFCONFIG" ]; then
@@ -84,7 +56,7 @@ jobs:
           sed -i '/CONFIG_LOCALVERSION=/d' "$DEFCONFIG"
           echo 'CONFIG_LOCALVERSION="-Next-Gen"' >> "$DEFCONFIG"
 
-          # User requested configs
+          # User requested & KernelSU configs
           echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           echo "CONFIG_OVERLAY_FS=y" >> "$DEFCONFIG"
           echo "CONFIG_TMPFS_XATTR=y" >> "$DEFCONFIG"
@@ -92,7 +64,7 @@ jobs:
           echo "CONFIG_HAVE_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBE_EVENTS=y" >> "$DEFCONFIG"
 
-          # MIUI & HyperOS Essentials
+          # HyperOS 3 / MIUI Hardware Drivers
           echo "CONFIG_MIUI_FREQUENT_APP=y" >> "$DEFCONFIG"
           echo "CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=y" >> "$DEFCONFIG"
           echo "CONFIG_INPUT_TOUCHSCREEN=y" >> "$DEFCONFIG"
@@ -114,7 +86,7 @@ jobs:
             make O=out CC=clang "$DEFCONFIG_NAME"
           fi
 
-          # Compile Image & dtbs
+          # Compile Image, DTBs, and DTBO
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
@@ -123,27 +95,76 @@ jobs:
             LLVM=1 \
             LLVM_IAS=1 \
             KCFLAGS="-Wno-error" \
-            Image.gz dtbs
+            Image dtbs dtbo.img
 
-      - name: Package with AnyKernel3
+      - name: Package with AnyKernel3 (HyperOS Boot & Vendor_Boot Mod)
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git zipper
 
-          sed -i 's/do.devicecheck=1/do.devicecheck=1/g' zipper/anykernel.sh
-          sed -i 's/device.name1=.*/device.name1=vili/g' zipper/anykernel.sh
-          sed -i 's/device.name2=.*/device.name2=vili_in/g' zipper/anykernel.sh
-          sed -i 's/device.name3=.*/device.name3=2107113SI/g' zipper/anykernel.sh
-          sed -i 's/device.name4=.*/device.name4=2107113SG/g' zipper/anykernel.sh
-          sed -i 's/is_slot_device=0/is_slot_device=1/g' zipper/anykernel.sh
+          # Write your verified AnyKernel3 script
+          cat << 'EOF' > zipper/anykernel.sh
+          ### AnyKernel3 Ramdisk Mod Script
+          ## osm0sis @ xda-developers
 
-          if [ -f out/arch/arm64/boot/Image.gz ]; then
-            cp out/arch/arm64/boot/Image.gz zipper/
-          elif [ -f out/arch/arm64/boot/Image ]; then
-            cp out/arch/arm64/boot/Image zipper/
+          ### AnyKernel setup
+          properties() { '
+          kernel.string=Next-Gen for FrenkyMahn 
+          do.devicecheck=1
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=0
+          device.name1=Xiaomi 11T Pro
+          device.name2=milahaina
+          device.name3=vili
+          supported.versions=11.0-17.0
+          supported.patchlevels=
+          supported.vendorpatchlevels=
+          '; } # end properties
+
+          ### AnyKernel install
+          ## boot install — MIUI/HyperOS: replace kernel in boot partition.
+          BLOCK=boot;
+          IS_SLOT_DEVICE=1;
+          RAMDISK_COMPRESSION=auto;
+          PATCH_VBMETA_FLAG=auto;
+
+          . tools/ak3-core.sh && passthrough;
+
+          dump_boot;
+          write_boot;
+          ## end boot install
+
+          ## vendor_boot — flash our DTB + empty modules.load (fix slow boot/loop)
+          BLOCK=vendor_boot;
+          IS_SLOT_DEVICE=1;
+          RAMDISK_COMPRESSION=auto;
+          PATCH_VBMETA_FLAG=auto;
+
+          reset_ak;
+
+          split_boot;
+          unpack_ramdisk;
+
+          find $AKHOME/ramdisk/lib/modules -name "modules.load" -exec sh -c 'echo -n > {}' \;
+          find $AKHOME/ramdisk/lib/modules -name "modules.dep" -exec sh -c 'echo -n > {}' \;
+
+          repack_ramdisk;
+          flash_boot;
+          ## end vendor_boot install
+          EOF
+
+          # Copy Image
+          cp out/arch/arm64/boot/Image zipper/
+
+          # Concatenate and copy DTB
+          find out/arch/arm64/boot/dts/vendor/qcom -name "*sm8350*.dtb" -o -name "*vili*.dtb" -exec cat {} + > zipper/dtb 2>/dev/null || true
+          [ ! -s zipper/dtb ] && [ -f out/arch/arm64/boot/dtb ] && cp out/arch/arm64/boot/dtb zipper/dtb || true
+
+          # Copy DTBO if generated
+          if [ -f out/arch/arm64/boot/dtbo.img ]; then
+            cp out/arch/arm64/boot/dtbo.img zipper/
           fi
-
-          find out/arch/arm64/boot/dts/vendor/qcom -name "*sm8350*.dtb" -exec cat {} + > zipper/dtb 2>/dev/null || true
-          [ ! -s zipper/dtb ] && [ -f out/arch/arm64/boot/dtb ] && cp out/arch/arm64/boot/dtb zipper/dtb
 
           cd zipper
           zip -r9 ../Next-Gen-HyperOS-Vili.zip * -x .git README.md
