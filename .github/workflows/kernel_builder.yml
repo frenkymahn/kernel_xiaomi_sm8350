@@ -109,7 +109,7 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang headers_install || true
 
-          # Build Image and all device tree blobs
+          # Build Image and DTBs
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
@@ -153,7 +153,7 @@ jobs:
           dump_boot;
           write_boot;
 
-          ## dtbo install (Flashing real compiled DTBO)
+          ## dtbo install (Flash real compiled DTBO only if present)
           if [ -f $AKHOME/dtbo.img ]; then
             BLOCK=dtbo;
             IS_SLOT_DEVICE=1;
@@ -172,27 +172,29 @@ jobs:
           flash_boot;
           EOF
 
-          # 1. Copy Image
+          # 1. Copy raw Image
           cp out/arch/arm64/boot/Image zipper/
 
           # 2. Generate and copy combined DTB
           find out/arch/arm64/boot/dts/vendor/qcom -name "*sm8350*.dtb" -o -name "*vili*.dtb" ! -name "*overlay*" -exec cat {} + > zipper/dtb 2>/dev/null || true
           [ ! -s zipper/dtb ] && [ -f out/arch/arm64/boot/dtb ] && cp out/arch/arm64/boot/dtb zipper/dtb || true
 
-          # 3. Build REAL dtbo.img using official AOSP mkdtboimg tool
-          curl -LO "https://android.googlesource.com/platform/system/libufdt/+archive/master/utils/src.tar.gz"
-          tar -xf src.tar.gz mkdtboimg.py 2>/dev/null || true
-          
-          # Find all overlay files compiled by kernel
+          # 3. Download standalone official mkdtboimg directly
+          curl -sSL "https://raw.githubusercontent.com/cfig/Android_boot_image_editor/master/mkdtboimg.py" -o mkdtboimg.py
+          chmod +x mkdtboimg.py
+
+          # Find real overlay files
           DTBO_FILES=$(find out/arch/arm64/boot/dts/vendor/qcom/ -name "*vili*overlay*.dtbo" -o -name "*sm8350*overlay*.dtbo" 2>/dev/null)
           if [ -z "$DTBO_FILES" ]; then
             DTBO_FILES=$(find out/arch/arm64/boot/dts/ -name "*overlay*.dtbo" -o -name "*dtbo*.dtb" 2>/dev/null)
           fi
 
           if [ -n "$DTBO_FILES" ]; then
-            python3 mkdtboimg.py create zipper/dtbo.img --page_size=4096 $DTBO_FILES
-            echo "Successfully generated real dtbo.img:"
-            ls -lh zipper/dtbo.img
+            python3 mkdtboimg.py create zipper/dtbo.img --page_size=4096 $DTBO_FILES || true
+            if [ -f zipper/dtbo.img ]; then
+              echo "Real DTBO successfully generated:"
+              ls -lh zipper/dtbo.img
+            fi
           fi
 
           cd zipper
