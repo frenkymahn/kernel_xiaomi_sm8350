@@ -41,7 +41,6 @@ jobs:
         run: |
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main || true
 
-          # Provide stubs to safely satisfy fs hooks
           cat << 'EOF' > fs/ksu_stubs.c
           #include <linux/types.h>
           #include <linux/fs.h>
@@ -79,7 +78,7 @@ jobs:
           sed -i '/CONFIG_LOCALVERSION=/d' "$DEFCONFIG"
           echo 'CONFIG_LOCALVERSION="-Next-Gen"' >> "$DEFCONFIG"
 
-          # User requested & KernelSU configs
+          # User requested configs
           echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           echo "CONFIG_OVERLAY_FS=y" >> "$DEFCONFIG"
           echo "CONFIG_TMPFS_XATTR=y" >> "$DEFCONFIG"
@@ -87,7 +86,7 @@ jobs:
           echo "CONFIG_HAVE_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBE_EVENTS=y" >> "$DEFCONFIG"
 
-          # HyperOS 3 / MIUI Hardware Drivers
+          # HyperOS Display & Hardware Drivers
           echo "CONFIG_MIUI_FREQUENT_APP=y" >> "$DEFCONFIG"
           echo "CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE=y" >> "$DEFCONFIG"
           echo "CONFIG_INPUT_TOUCHSCREEN=y" >> "$DEFCONFIG"
@@ -102,17 +101,15 @@ jobs:
           export KBUILD_BUILD_USER="FrenkyMahn"
           export KBUILD_BUILD_HOST="Builder"
 
-          # Load defconfig
           if [ -f "arch/arm64/configs/vendor/$DEFCONFIG_NAME" ]; then
             make O=out CC=clang "vendor/$DEFCONFIG_NAME"
           else
             make O=out CC=clang "$DEFCONFIG_NAME"
           fi
 
-          # Safe headers install
           make O=out ARCH=arm64 CC=clang headers_install || true
 
-          # Compile Image and DTBs
+          # Build Image and all device tree blobs
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
@@ -123,16 +120,15 @@ jobs:
             KCFLAGS="-Wno-error" \
             Image dtbs
 
-      - name: Package with AnyKernel3 (HyperOS Boot & Vendor_Boot Mod)
+      - name: Package with AnyKernel3
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git zipper
 
-          # Write complete custom anykernel script for HyperOS 3.0306.0
+          # Write proper AnyKernel script
           cat << 'EOF' > zipper/anykernel.sh
           ### AnyKernel3 Ramdisk Mod Script
           ## osm0sis @ xda-developers
 
-          ### AnyKernel setup
           properties() { '
           kernel.string=Next-Gen for FrenkyMahn 
           do.devicecheck=1
@@ -144,12 +140,9 @@ jobs:
           device.name2=milahaina
           device.name3=vili
           supported.versions=11.0-17.0
-          supported.patchlevels=
-          supported.vendorpatchlevels=
-          '; } # end properties
+          '; }
 
-          ### AnyKernel install
-          ## boot install — MIUI/HyperOS: replace kernel in boot partition.
+          ## boot install
           BLOCK=boot;
           IS_SLOT_DEVICE=1;
           RAMDISK_COMPRESSION=auto;
@@ -159,43 +152,48 @@ jobs:
 
           dump_boot;
           write_boot;
-          ## end boot install
 
-          ## vendor_boot — flash our DTB + empty modules.load (fix slow boot)
+          ## dtbo install (Flashing real compiled DTBO)
+          if [ -f $AKHOME/dtbo.img ]; then
+            BLOCK=dtbo;
+            IS_SLOT_DEVICE=1;
+            reset_ak;
+            write_boot;
+          fi;
+
+          ## vendor_boot install (Flashing DTB)
           BLOCK=vendor_boot;
           IS_SLOT_DEVICE=1;
           RAMDISK_COMPRESSION=auto;
           PATCH_VBMETA_FLAG=auto;
 
           reset_ak;
-
           split_boot;
-          unpack_ramdisk;
-
-          find $AKHOME/ramdisk/lib/modules -name "modules.load" -exec sh -c 'echo -n > {}' \;
-          find $AKHOME/ramdisk/lib/modules -name "modules.dep" -exec sh -c 'echo -n > {}' \;
-
-          repack_ramdisk;
           flash_boot;
-          ## end vendor_boot install
           EOF
 
-          # Copy Image
+          # 1. Copy Image
           cp out/arch/arm64/boot/Image zipper/
 
-          # Concatenate and generate dtb
-          find out/arch/arm64/boot/dts/vendor/qcom -name "*sm8350*.dtb" -o -name "*vili*.dtb" -exec cat {} + > zipper/dtb 2>/dev/null || true
+          # 2. Generate and copy combined DTB
+          find out/arch/arm64/boot/dts/vendor/qcom -name "*sm8350*.dtb" -o -name "*vili*.dtb" ! -name "*overlay*" -exec cat {} + > zipper/dtb 2>/dev/null || true
           [ ! -s zipper/dtb ] && [ -f out/arch/arm64/boot/dtb ] && cp out/arch/arm64/boot/dtb zipper/dtb || true
 
-          # Generate dtbo.img using mkdtboimg
-          if [ -f "scripts/dtc/libfdt/mkdtboimg.py" ]; then
-            python3 scripts/dtc/libfdt/mkdtboimg.py create zipper/dtbo.img --page_size=4096 $(find out/arch/arm64/boot/dts/vendor/qcom -name "*dtbo*.dtb*" 2>/dev/null) 2>/dev/null || true
+          # 3. Build REAL dtbo.img using official AOSP mkdtboimg tool
+          curl -LO "https://android.googlesource.com/platform/system/libufdt/+archive/master/utils/src.tar.gz"
+          tar -xf src.tar.gz mkdtboimg.py 2>/dev/null || true
+          
+          # Find all overlay files compiled by kernel
+          DTBO_FILES=$(find out/arch/arm64/boot/dts/vendor/qcom/ -name "*vili*overlay*.dtbo" -o -name "*sm8350*overlay*.dtbo" 2>/dev/null)
+          if [ -z "$DTBO_FILES" ]; then
+            DTBO_FILES=$(find out/arch/arm64/boot/dts/ -name "*overlay*.dtbo" -o -name "*dtbo*.dtb" 2>/dev/null)
           fi
-          if [ ! -f "zipper/dtbo.img" ] && [ -f "out/arch/arm64/boot/dtbo.img" ]; then
-            cp out/arch/arm64/boot/dtbo.img zipper/
+
+          if [ -n "$DTBO_FILES" ]; then
+            python3 mkdtboimg.py create zipper/dtbo.img --page_size=4096 $DTBO_FILES
+            echo "Successfully generated real dtbo.img:"
+            ls -lh zipper/dtbo.img
           fi
-          # Ensure dummy dtbo if build tree doesn't produce standalone to prevent script missing errors
-          [ ! -f "zipper/dtbo.img" ] && touch zipper/dtbo.img
 
           cd zipper
           zip -r9 ../Next-Gen-HyperOS-Vili.zip * -x .git README.md
