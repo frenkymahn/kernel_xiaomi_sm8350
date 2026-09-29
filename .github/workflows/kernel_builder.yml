@@ -15,8 +15,9 @@ jobs:
 
       - name: Purge Broken Submodules
         run: |
+          # Completely clean submodule cache to avoid post-job exit 128
           git submodule deinit -f --all 2>/dev/null || true
-          git config --file .gitmodules --remove-section submodule.KernelSU 2>/dev/null || true
+          git config -f .gitmodules --remove-section submodule.KernelSU 2>/dev/null || true
           git config --remove-section submodule.KernelSU 2>/dev/null || true
           rm -rf .git/modules/KernelSU .gitmodules drivers/kernelsu KernelSU
 
@@ -37,17 +38,10 @@ jobs:
           cp -r $LATEST_CLANG/* clang/
           rm -rf clang-prebuilts
 
-      - name: Integrate KernelSU Into Driver Tree
+      - name: Setup Official KernelSU
         run: |
-          # 1. Clone legacy KernelSU v0.9.5 with the exact GitHub URL
-          rm -rf drivers/kernelsu
-          git clone --depth=1 -b v0.9.5 https://github.com/tiann/KernelSU.git drivers/kernelsu
-
-          # 2. Wire driver compilation directly into drivers/Makefile
-          sed -i '1i obj-y += kernelsu/kernel/' drivers/Makefile
-
-          # 3. Create dummy Kconfig link if missing
-          [ -f "drivers/kernelsu/kernel/Kconfig" ] && [ ! -f "drivers/kernelsu/Kconfig" ] && ln -s kernel/Kconfig drivers/kernelsu/Kconfig || true
+          # Install via official installer to ensure full tree integration
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
       - name: Inject Configurations
         run: |
@@ -92,6 +86,11 @@ jobs:
           else
             make O=out CC=clang "$DEFCONFIG_NAME"
           fi
+
+          # Enable KSU in .config
+          scripts/config --file out/.config -e KSU
+          scripts/config --file out/.config -e OVERLAY_FS
+          scripts/config --file out/.config -e TMPFS_XATTR
 
           # Compile Image & dtbs
           make -j$(nproc --all) O=out \
