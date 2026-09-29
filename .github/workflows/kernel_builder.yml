@@ -38,10 +38,20 @@ jobs:
           cp -r $LATEST_CLANG/* clang/
           rm -rf clang-prebuilts
 
-      - name: Setup Official KernelSU
+      - name: Integrate KernelSU v0.9.5 With Legacy Hooks
         run: |
-          # Install via official installer to ensure full tree integration
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+          # 1. Clone legacy KernelSU v0.9.5 that matches ksu_handle_* hooks in fs/
+          rm -rf KernelSU
+          git clone --depth=1 -b v0.9.5 https://github.com/tiann/KernelSU.git KernelSU
+
+          # 2. Wire KernelSU driver directory into Root Makefile
+          sed -i '/KernelSU/d' Makefile
+          sed -i 's|core-y[[:space:]]*+= kernel/ certs/ mm/ fs/ ipc/ security/ crypto/ block/|core-y += kernel/ certs/ mm/ fs/ ipc/ security/ crypto/ block/ KernelSU/kernel/|g' Makefile
+
+          # 3. Create dummy driver bridge in case Kconfig checks it
+          mkdir -p drivers/kernelsu
+          echo 'obj-y += ../../KernelSU/kernel/' > drivers/kernelsu/Makefile
+          touch drivers/kernelsu/Kconfig
 
       - name: Inject Configurations
         run: |
