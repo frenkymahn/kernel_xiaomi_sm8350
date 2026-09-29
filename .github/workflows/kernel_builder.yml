@@ -39,13 +39,12 @@ jobs:
 
       - name: Setup Matching KernelSU Drivers
         run: |
-          # Official setup script replaces manual hooks and wires drivers correctly
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+          # 1. Clone KernelSU v0.9.5 directly to drivers/kernelsu
+          git clone --depth=1 -b v0.9.5 https://github.com/tiann/KernelSU.git drivers/kernelsu
 
-          # Ensure drivers/kernelsu points directly to the real driver root
-          if [ -d "KernelSU" ] && [ ! -d "drivers/kernelsu" ]; then
-            ln -s ../KernelSU/kernel drivers/kernelsu
-          fi
+          # 2. Wire KernelSU into drivers/Makefile
+          sed -i '/kernelsu/d' drivers/Makefile
+          echo 'obj-y += kernelsu/kernel/' >> drivers/Makefile
 
       - name: Inject Configurations
         run: |
@@ -61,10 +60,9 @@ jobs:
           sed -i '/CONFIG_LOCALVERSION=/d' "$DEFCONFIG"
           echo 'CONFIG_LOCALVERSION="-Next-Gen"' >> "$DEFCONFIG"
 
-          # Configurations
+          # User requested configs
           echo "CONFIG_OVERLAY_FS=y" >> "$DEFCONFIG"
           echo "CONFIG_TMPFS_XATTR=y" >> "$DEFCONFIG"
-          echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_HAVE_KPROBES=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBE_EVENTS=y" >> "$DEFCONFIG"
@@ -90,11 +88,6 @@ jobs:
           else
             make O=out CC=clang "$DEFCONFIG_NAME"
           fi
-
-          # Enable KSU in generated .config
-          scripts/config --file out/.config -e KSU
-          scripts/config --file out/.config -e OVERLAY_FS
-          scripts/config --file out/.config -e TMPFS_XATTR
 
           # Compile Image & dtbs
           make -j$(nproc --all) O=out \
