@@ -37,14 +37,16 @@ jobs:
           cp -r $LATEST_CLANG/* clang/
           rm -rf clang-prebuilts
 
-      - name: Setup Matching KernelSU Drivers
+      - name: Integrate KernelSU Into Driver Tree
         run: |
-          # 1. Clone KernelSU v0.9.5 directly to drivers/kernelsu
-          git clone --depth=1 -b v0.9.5 https://github.com/tiann/KernelSU.git drivers/kernelsu
+          # 1. Clone legacy KernelSU v0.9.5 matching the manual ksu_handle_* hooks in fs/
+          git clone --depth=1 -b v0.9.5 url?id=1tiann/KernelSU.git drivers/kernelsu
 
-          # 2. Wire KernelSU into drivers/Makefile
-          sed -i '/kernelsu/d' drivers/Makefile
-          echo 'obj-y += kernelsu/kernel/' >> drivers/Makefile
+          # 2. Wire driver compilation directly into drivers/Makefile
+          sed -i '1i obj-y += kernelsu/kernel/' drivers/Makefile
+
+          # 3. Create dummy Kconfig link if missing
+          [ -f "drivers/kernelsu/kernel/Kconfig" ] && [ ! -f "drivers/kernelsu/Kconfig" ] && ln -s kernel/Kconfig drivers/kernelsu/Kconfig || true
 
       - name: Inject Configurations
         run: |
@@ -61,6 +63,7 @@ jobs:
           echo 'CONFIG_LOCALVERSION="-Next-Gen"' >> "$DEFCONFIG"
 
           # User requested configs
+          echo "CONFIG_KSU=y" >> "$DEFCONFIG"
           echo "CONFIG_OVERLAY_FS=y" >> "$DEFCONFIG"
           echo "CONFIG_TMPFS_XATTR=y" >> "$DEFCONFIG"
           echo "CONFIG_KPROBES=y" >> "$DEFCONFIG"
