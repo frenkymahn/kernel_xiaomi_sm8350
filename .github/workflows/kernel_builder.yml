@@ -109,7 +109,7 @@ jobs:
 
           make O=out ARCH=arm64 CC=clang headers_install || true
 
-          # Build Image and DTBs
+          # Build raw Image and DTBs
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CC=clang \
@@ -124,7 +124,7 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git zipper
 
-          # Write proper AnyKernel script
+          # Write verified AnyKernel script
           cat << 'EOF' > zipper/anykernel.sh
           ### AnyKernel3 Ramdisk Mod Script
           ## osm0sis @ xda-developers
@@ -153,15 +153,15 @@ jobs:
           dump_boot;
           write_boot;
 
-          ## dtbo install (Flash real compiled DTBO only if present)
-          if [ -f $AKHOME/dtbo.img ]; then
+          ## dtbo install (only if real dtbo exists and non-empty)
+          if [ -s $AKHOME/dtbo.img ]; then
             BLOCK=dtbo;
             IS_SLOT_DEVICE=1;
             reset_ak;
             write_boot;
           fi;
 
-          ## vendor_boot install (Flashing DTB)
+          ## vendor_boot install
           BLOCK=vendor_boot;
           IS_SLOT_DEVICE=1;
           RAMDISK_COMPRESSION=auto;
@@ -175,26 +175,21 @@ jobs:
           # 1. Copy raw Image
           cp out/arch/arm64/boot/Image zipper/
 
-          # 2. Generate and copy combined DTB
-          find out/arch/arm64/boot/dts/vendor/qcom -name "*sm8350*.dtb" -o -name "*vili*.dtb" ! -name "*overlay*" -exec cat {} + > zipper/dtb 2>/dev/null || true
-          [ ! -s zipper/dtb ] && [ -f out/arch/arm64/boot/dtb ] && cp out/arch/arm64/boot/dtb zipper/dtb || true
-
-          # 3. Download standalone official mkdtboimg directly
-          curl -sSL "https://raw.githubusercontent.com/cfig/Android_boot_image_editor/master/mkdtboimg.py" -o mkdtboimg.py
-          chmod +x mkdtboimg.py
-
-          # Find real overlay files
-          DTBO_FILES=$(find out/arch/arm64/boot/dts/vendor/qcom/ -name "*vili*overlay*.dtbo" -o -name "*sm8350*overlay*.dtbo" 2>/dev/null)
-          if [ -z "$DTBO_FILES" ]; then
-            DTBO_FILES=$(find out/arch/arm64/boot/dts/ -name "*overlay*.dtbo" -o -name "*dtbo*.dtb" 2>/dev/null)
+          # 2. Extract and concatenate REAL DTB
+          find out/arch/arm64/boot/dts/ -name "*sm8350*.dtb" -o -name "*vili*.dtb" ! -name "*overlay*" -exec cat {} + > zipper/dtb
+          if [ ! -s zipper/dtb ]; then
+            find out/arch/arm64/boot/dts/ -name "*.dtb" ! -name "*overlay*" -exec cat {} + > zipper/dtb
           fi
+          echo "Generated Real DTB details:"
+          ls -lh zipper/dtb
 
-          if [ -n "$DTBO_FILES" ]; then
-            python3 mkdtboimg.py create zipper/dtbo.img --page_size=4096 $DTBO_FILES || true
-            if [ -f zipper/dtbo.img ]; then
-              echo "Real DTBO successfully generated:"
-              ls -lh zipper/dtbo.img
-            fi
+          # 3. Build REAL dtbo.img using official libufdt
+          git clone --depth=1 https://android.googlesource.com/platform/system/libufdt libufdt-tools
+          DTBO_LIST=$(find out/arch/arm64/boot/dts/ -name "*overlay*.dtbo" -o -name "*dtbo*.dtb")
+          if [ -n "$DTBO_LIST" ]; then
+            python3 libufdt-tools/utils/src/mkdtboimg.py create zipper/dtbo.img --page_size=4096 $DTBO_LIST
+            echo "Generated Real DTBO details:"
+            ls -lh zipper/dtbo.img
           fi
 
           cd zipper
