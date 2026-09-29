@@ -39,8 +39,9 @@ jobs:
 
       - name: Integrate KernelSU Into Driver Tree
         run: |
-          # 1. Clone legacy KernelSU v0.9.5 matching the manual ksu_handle_* hooks in fs/
-          git clone --depth=1 -b v0.9.5 url?id=1tiann/KernelSU.git drivers/kernelsu
+          # 1. Clone legacy KernelSU v0.9.5 with the exact GitHub URL
+          rm -rf drivers/kernelsu
+          git clone --depth=1 -b v0.9.5 https://github.com/tiann/KernelSU.git drivers/kernelsu
 
           # 2. Wire driver compilation directly into drivers/Makefile
           sed -i '1i obj-y += kernelsu/kernel/' drivers/Makefile
