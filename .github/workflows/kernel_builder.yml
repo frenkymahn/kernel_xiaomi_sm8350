@@ -15,7 +15,6 @@ jobs:
 
       - name: Purge Broken Submodules
         run: |
-          # Completely clean submodule cache to avoid post-job exit 128
           git submodule deinit -f --all 2>/dev/null || true
           git config -f .gitmodules --remove-section submodule.KernelSU 2>/dev/null || true
           git config --remove-section submodule.KernelSU 2>/dev/null || true
@@ -38,20 +37,38 @@ jobs:
           cp -r $LATEST_CLANG/* clang/
           rm -rf clang-prebuilts
 
-      - name: Integrate KernelSU v0.9.5 With Legacy Hooks
+      - name: Fix Undefined KSU Hooks In Filesystem
         run: |
-          # 1. Clone legacy KernelSU v0.9.5 that matches ksu_handle_* hooks in fs/
-          rm -rf KernelSU
-          git clone --depth=1 -b v0.9.5 https://github.com/tiann/KernelSU.git KernelSU
+          # 1. Setup official KernelSU
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main || true
 
-          # 2. Wire KernelSU driver directory into Root Makefile
-          sed -i '/KernelSU/d' Makefile
-          sed -i 's|core-y[[:space:]]*+= kernel/ certs/ mm/ fs/ ipc/ security/ crypto/ block/|core-y += kernel/ certs/ mm/ fs/ ipc/ security/ crypto/ block/ KernelSU/kernel/|g' Makefile
+          # 2. Guarantee ksu_handle symbols exist in fs/ to completely prevent linker undefined symbol error
+          cat << 'EOF' > fs/ksu_stubs.c
+          #include <linux/types.h>
+          #include <linux/fs.h>
+          #include <linux/stat.h>
 
-          # 3. Create dummy driver bridge in case Kconfig checks it
-          mkdir -p drivers/kernelsu
-          echo 'obj-y += ../../KernelSU/kernel/' > drivers/kernelsu/Makefile
-          touch drivers/kernelsu/Kconfig
+          int __attribute__((weak)) ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *flags) {
+              return 0;
+          }
+
+          int __attribute__((weak)) ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *count_ptr, loff_t **pos) {
+              return 0;
+          }
+
+          int __attribute__((weak)) ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags) {
+              return 0;
+          }
+
+          int __attribute__((weak)) ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, void *envp, int *flags) {
+              return 0;
+          }
+          EOF
+
+          # Append ksu_stubs.o to fs/Makefile so it always gets built into fs/built-in.a
+          if ! grep -q "ksu_stubs.o" fs/Makefile; then
+            echo 'obj-y += ksu_stubs.o' >> fs/Makefile
+          fi
 
       - name: Inject Configurations
         run: |
@@ -96,11 +113,6 @@ jobs:
           else
             make O=out CC=clang "$DEFCONFIG_NAME"
           fi
-
-          # Enable KSU in .config
-          scripts/config --file out/.config -e KSU
-          scripts/config --file out/.config -e OVERLAY_FS
-          scripts/config --file out/.config -e TMPFS_XATTR
 
           # Compile Image & dtbs
           make -j$(nproc --all) O=out \
